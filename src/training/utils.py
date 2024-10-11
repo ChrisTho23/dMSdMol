@@ -1,3 +1,4 @@
+"""Utility functions for training."""
 import json
 import os
 import tarfile
