@@ -1,4 +1,5 @@
 import logging
+from typing import Any, Dict
 
 import fire
 import sagemaker
@@ -12,6 +13,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 def initiate_sagemaker_session():
+    """Initializes a SageMaker session and retrieves the execution role. Only works in SageMaker."""
     sess = sagemaker.Session()
     role = sagemaker.get_execution_role()
 
