@@ -28,6 +28,7 @@ import datasets
 import evaluate
 import nltk
 import numpy as np
+import torch as t
 import transformers
 from datasets import load_dataset
 from filelock import FileLock
@@ -794,6 +795,8 @@ def main():
             compute_metrics if training_args.predict_with_generate else None
         ),
     )
+
+    # trainer.loss_fn = torch.nn.CrossEntropyLoss(ignore_index=self.config.pad_token_id) # TODO: Add custom loss function
 
     # Training
     if training_args.do_train:
