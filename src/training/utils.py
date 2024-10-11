@@ -2,10 +2,10 @@ import json
 import os
 import tarfile
 
+from dotenv import load_dotenv
 from huggingface_hub import HfApi, Repository
 from sagemaker.huggingface import HuggingFace
 from sagemaker.s3 import S3Downloader
-from dotenv import load_dotenv
 
 from .config import SageMakerTrainingConfig
 

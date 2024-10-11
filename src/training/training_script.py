@@ -28,10 +28,9 @@ import datasets
 import evaluate
 import nltk
 import numpy as np
+import transformers
 from datasets import load_dataset
 from filelock import FileLock
-
-import transformers
 from transformers import (
     AutoConfig,
     AutoModelForSeq2SeqLM,
@@ -53,7 +52,6 @@ from transformers.utils import (
     send_example_telemetry,
 )
 from transformers.utils.versions import require_version
-
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.46.0.dev0")
