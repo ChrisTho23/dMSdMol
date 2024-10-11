@@ -1,7 +1,4 @@
-from transformers import (
-    BartForConditionalGeneration,
-    BartTokenizer
-)
+from transformers import BartForConditionalGeneration, BartTokenizer
 
 from .config import BartModelConfig
 
