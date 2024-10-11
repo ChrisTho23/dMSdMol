@@ -1,9 +1,5 @@
-from transformers import (
-    BartForConditionalGeneration,
-    BartTokenizer,
-    Trainer,
-    TrainingArguments,
-)
+from transformers import (BartForConditionalGeneration, BartTokenizer, Trainer,
+                          TrainingArguments)
 
 from .config import BartModelConfig
 
