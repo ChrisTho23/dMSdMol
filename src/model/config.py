@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+
 @dataclass
 class BartModelConfig:
     model_name: str = "facebook/bart-large"
