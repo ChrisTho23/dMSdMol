@@ -23,5 +23,6 @@ class SageMakerTrainingConfig:
         "num_train_epochs": 3,
         "learning_rate": 5e-5,
         "seed": 42,
-        "fp16": True,
+        "fp16": False,
+        "report_to": "wandb",
     }
