@@ -20,28 +20,20 @@ def initiate_sagemaker_session():
 
     return sess, role
 
-def get_sagemaker_estimator(role, git_config, distribution, train_config):
+def get_sagemaker_estimator(role: Any, git_config: Dict[str, str], distribution: Dict[str, Dict[str, bool]], train_config: SageMakerTrainingConfig):
     """Creates a SageMaker HuggingFace estimator for distributed training."""
     huggingface_estimator = HuggingFace(
         entry_point='training_script.py', 
-        source_dir='.',
-        role=role,
+        source_dir='./src/training',
         git_config=git_config,
-        distribution=distribution,
         instance_type=train_config.instance_type,
         instance_count=train_config.instance_count,
         transformers_version='4.45',  
         pytorch_version='2.4',  
         py_version='py310',
-        hyperparameters={
-            'model_name': train_config.model_name,
-            'output_dir': '/opt/ml/model',
-            'train_batch_size': train_config.train_batch_size,
-            'learning_rate': train_config.learning_rate,
-            'num_train_epochs': train_config.num_train_epochs,
-            'weight_decay': train_config.weight_decay,
-            'evaluation_strategy': train_config.evaluation_strategy,
-        }
+        role=role,
+        hyperparameters=train_config.hyperparameters,
+        distribution=distribution,
     )
     return huggingface_estimator
 
