@@ -4,6 +4,7 @@ import os
 import fire
 from datasets import Dataset, DatasetDict, Features, Sequence, Value
 from dotenv import load_dotenv
+from utils import dataset_to_hub
 
 load_dotenv()
 hf_token = os.getenv("HF_TOKEN")
@@ -70,13 +71,9 @@ def create_dataset_dict():
         "test": Dataset.from_list([data[2]], features=features),
     })
 
-def save_and_upload_dataset(dataset, repo_name):
-    dataset.save_to_disk(f"./data/{repo_name}")
-    dataset.push_to_hub(f"{hf_username}/{repo_name}", token=hf_token)
-
 def main(repo_name):
     dataset = create_dataset_dict()
-    save_and_upload_dataset(dataset, repo_name)
+    dataset_to_hub(dataset, repo_name, hf_username, hf_token)
     print(f"Dataset '{repo_name}' uploaded successfully.")
 
 if __name__ == "__main__":
