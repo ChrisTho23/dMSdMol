@@ -10,7 +10,7 @@ class SageMakerTrainingConfig:
     learning_rate: float = 5e-5
     num_epochs: int = 3
     warmup_steps: int = 0
-    save_every: int = 1
+    save_every: int = 0
     model_dir: str = "./logs/"
     max_length: int = 128
     seed: int = 42

@@ -33,6 +33,11 @@ class Mol2MSModel(nn.Module):
             self.config.max_ms_length, self.encoder.config.hidden_size
         )
 
+        if self.tokenizer.bos_token is None:
+            self.tokenizer.bos_token = "<s>"
+        if self.tokenizer.eos_token is None:
+            self.tokenizer.eos_token = "</s>"
+
     def forward(
         self,
         input_ids: Int[torch.Tensor, "batch seq"],
@@ -61,7 +66,10 @@ class Mol2MSModel(nn.Module):
     def tokenize(self, smiles_string: str):
         """Tokenizes a SMILES string using the BART tokenizer."""
         return self.tokenizer(
-            smiles_string, return_tensors="pt", padding=True, truncation=True
+            smiles_string, return_tensors="pt", 
+            padding="max_length",
+            truncation=True,
+            max_length=self.config.max_length,
         )
 
     def save(self, path: str):
