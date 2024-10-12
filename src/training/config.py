@@ -12,6 +12,6 @@ class SageMakerTrainingConfig:
     warmup_steps: int = 0
     save_every: int = 1
     model_dir: str = "./logs/"
-    max_length: int = 128  
+    max_length: int = 128
     seed: int = 42
     fp16: bool = False
