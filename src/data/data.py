@@ -1,86 +1,67 @@
-"""Loads data from S3, processes it, and loads it into a Hugging Face Dataset."""
+import torch
+from torch.utils.data import Dataset
+from transformers import AutoTokenizer
+from typing import Dict, List, Tuple
 
-import logging
-import os
+class Mol2MSDataset(Dataset):
+    def __init__(self, hf_dataset: Dataset, model_name: str, max_ms_length: int, max_length: int):
+        self.dataset = hf_dataset
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.max_ms_length = max_ms_length
+        self.max_length = max_length
 
-import boto3
-import fire
-import pandas as pd
-from datasets import Dataset, DatasetDict, Features, Sequence, Value
-from dotenv import load_dotenv
-from sklearn.model_selection import train_test_split
-from utils import dataset_to_hub
+        if self.tokenizer.eos_token is None:
+            self.tokenizer.eos_token = '</s>'
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+    def __len__(self):
+        return len(self.dataset)
 
-load_dotenv()
-hf_token = os.getenv("HF_TOKEN")
-hf_username = os.getenv("HF_USERNAME")
+    def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
+        item = self.dataset[idx]
+        
+        smiles_encoding = self.tokenizer(
+            item['smiles'],
+            return_tensors="pt",
+            padding="max_length",
+            truncation=True,
+            max_length=self.max_length,
+            return_token_type_ids=False,
+            return_attention_mask=True,
+        )
 
+        ms_data: List[Tuple[float, float, int]] = []
+        for i, (mz, intensity) in enumerate(zip(item['mzs'], item['intensities'])):
+            ms_data.append((round(mz, 4), round(intensity, 4), i))
 
-def load_from_s3(file_name):
-    # Set up S3 client
-    s3 = boto3.client("s3")
-    bucket_name = "team4-bucket-hackathon"
+        ms_data.sort(key=lambda x: x[0])
+        ms_data = ms_data[:self.max_ms_length] # Truncate if too long
 
-    # Download file from S3
-    local_file_path = f"/tmp/{file_name}"
-    s3.download_file(bucket_name, file_name, local_file_path)
+        mzs, intensities, indices = zip(*ms_data) if ms_data else ([], [], [])
 
-    # Load data into DataFrame
-    df = pd.read_parquet(local_file_path)
+        mz_tensor = torch.tensor(mzs, dtype=torch.float32)
+        intensity_tensor = torch.tensor(intensities, dtype=torch.float32)
+        index_tensor = torch.tensor(indices, dtype=torch.long)
 
-    # Clean up temporary file
-    os.remove(local_file_path)
+        create_next_token_tensor = torch.ones(self.max_ms_length, dtype=torch.long)
+        if len(mzs) < self.max_ms_length:
+            create_next_token_tensor[len(mzs)-1:] = 0
+        else:
+            create_next_token_tensor[-1] = 0
 
-    return df
+        # pad if necessary
+        if len(mz_tensor) < self.max_ms_length:
+            padding_length = self.max_ms_length - len(mz_tensor)
+            mz_tensor = torch.nn.functional.pad(mz_tensor, (0, padding_length))
+            intensity_tensor = torch.nn.functional.pad(intensity_tensor, (0, padding_length))
+            index_tensor = torch.nn.functional.pad(index_tensor, (0, padding_length), value=self.max_ms_length-1)
 
-
-def df_to_dataset(df):
-    # Define features
-    features = Features(
-        {
-            "precursor_mz": Value("float32"),
-            "precursor_charge": Value("int32"),
-            "mzs": Sequence(Value("float32")),
-            "intensities": Sequence(Value("float32")),
-            "collision_energy": Value("float32"),
-            "instrument_type": Value("string"),
-            "in_silico": Value("bool"),
-            "smiles": Value("string"),
-            "adduct": Value("string"),
-            "compound_class": Value("string"),
+        return {
+            "input_ids": smiles_encoding.input_ids.squeeze(),
+            "attention_mask": smiles_encoding.attention_mask.squeeze(),
+            "mz": mz_tensor,
+            "intensity": intensity_tensor,
+            "index": index_tensor,
+            "create_next_token": create_next_token_tensor,
         }
-    )
-
-    # Split data into train, test, and validation sets
-    train_df, test_df = train_test_split(df, test_size=0.2, random_state=42)
-    train_df, val_df = train_test_split(train_df, test_size=0.1, random_state=42)
-
-    # Convert DataFrames to Hugging Face Datasets
-    train_dataset = Dataset.from_pandas(train_df, features=features)
-    test_dataset = Dataset.from_pandas(test_df, features=features)
-    val_dataset = Dataset.from_pandas(val_df, features=features)
-
-    # Create DatasetDict
-    dataset_dict = DatasetDict(
-        {"train": train_dataset, "test": test_dataset, "validation": val_dataset}
-    )
-
-    return dataset_dict
-
-
-def main(nist_file_name, enveda_file_name, repo_name):  # repo_name
-    nist_df = load_from_s3(nist_file_name)
-    enveda_df = load_from_s3(enveda_file_name)
-    df = pd.concat([nist_df, enveda_df])
-    dataset = df_to_dataset(df)
-    dataset_to_hub(dataset, repo_name, hf_username, hf_token)
-    logger.info(f"Dataset '{repo_name}' uploaded successfully.")
-
-
-if __name__ == "__main__":
-    fire.Fire(main)
