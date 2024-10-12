@@ -12,20 +12,23 @@ from sklearn.model_selection import train_test_split
 
 from utils import dataset_to_hub
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 load_dotenv()
 hf_token = os.getenv("HF_TOKEN")
 hf_username = os.getenv("HF_USERNAME")
 
+
 def load_from_s3(file_name):
     # Set up S3 client
-    s3 = boto3.client('s3')
-    bucket_name = 'team4-bucket-hackathon'
+    s3 = boto3.client("s3")
+    bucket_name = "team4-bucket-hackathon"
 
     # Download file from S3
-    local_file_path = f'/tmp/{file_name}'
+    local_file_path = f"/tmp/{file_name}"
     s3.download_file(bucket_name, file_name, local_file_path)
 
     # Load data into DataFrame
@@ -36,20 +39,23 @@ def load_from_s3(file_name):
 
     return df
 
+
 def df_to_dataset(df):
     # Define features
-    features = Features({
-        "precursor_mz": Value("float32"),
-        "precursor_charge": Value("int32"),
-        "mzs": Sequence(Value("float32")),
-        "intensities": Sequence(Value("float32")),
-        "collision_energy": Value("float32"),
-        "instrument_type": Value("string"),
-        "in_silico": Value("bool"),
-        "smiles": Value("string"),
-        "adduct": Value("string"),
-        "compound_class": Value("string"),
-    })
+    features = Features(
+        {
+            "precursor_mz": Value("float32"),
+            "precursor_charge": Value("int32"),
+            "mzs": Sequence(Value("float32")),
+            "intensities": Sequence(Value("float32")),
+            "collision_energy": Value("float32"),
+            "instrument_type": Value("string"),
+            "in_silico": Value("bool"),
+            "smiles": Value("string"),
+            "adduct": Value("string"),
+            "compound_class": Value("string"),
+        }
+    )
 
     # Split data into train, test, and validation sets
     train_df, test_df = train_test_split(df, test_size=0.2, random_state=42)
@@ -61,21 +67,21 @@ def df_to_dataset(df):
     val_dataset = Dataset.from_pandas(val_df, features=features)
 
     # Create DatasetDict
-    dataset_dict = DatasetDict({
-        'train': train_dataset,
-        'test': test_dataset,
-        'validation': val_dataset
-    })
+    dataset_dict = DatasetDict(
+        {"train": train_dataset, "test": test_dataset, "validation": val_dataset}
+    )
 
     return dataset_dict
 
-def main(nist_file_name, enveda_file_name, repo_name): # repo_name
+
+def main(nist_file_name, enveda_file_name, repo_name):  # repo_name
     nist_df = load_from_s3(nist_file_name)
     enveda_df = load_from_s3(enveda_file_name)
     df = pd.concat([nist_df, enveda_df])
     dataset = df_to_dataset(df)
     dataset_to_hub(dataset, repo_name, hf_username, hf_token)
     logger.info(f"Dataset '{repo_name}' uploaded successfully.")
+
 
 if __name__ == "__main__":
     fire.Fire(main)

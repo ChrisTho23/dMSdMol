@@ -1,4 +1,5 @@
 """Wrapper of Hugging Face's BART model for MS/MS to SMILES prediction and vice versa."""
+
 from transformers import BartForConditionalGeneration, BartTokenizer
 
 from .config import BartModelConfig

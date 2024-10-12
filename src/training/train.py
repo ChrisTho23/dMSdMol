@@ -1,4 +1,5 @@
 """Script to launch distributed training job on SageMaker."""
+
 import logging
 from typing import Any, Dict
 

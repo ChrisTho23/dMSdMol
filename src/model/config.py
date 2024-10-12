@@ -1,4 +1,5 @@
 """Configuration for Hugging Face BartModel wrapper."""
+
 from dataclasses import dataclass
 
 
