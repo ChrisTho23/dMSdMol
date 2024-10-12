@@ -1,3 +1,5 @@
+"""Configuration for distributed training on SageMaker."""
+
 from dataclasses import dataclass
 from typing import Any, Dict
 
