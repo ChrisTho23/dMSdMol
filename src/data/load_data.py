@@ -40,7 +40,6 @@ def load_from_s3(file_name):
 
 
 def df_to_dataset(df):
-    # Define features
     features = Features(
         {
             "precursor_mz": Value("float32"),
