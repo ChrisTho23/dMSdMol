@@ -66,7 +66,8 @@ class Mol2MSModel(nn.Module):
     def tokenize(self, smiles_string: str):
         """Tokenizes a SMILES string using the BART tokenizer."""
         return self.tokenizer(
-            smiles_string, return_tensors="pt", 
+            smiles_string,
+            return_tensors="pt",
             padding="max_length",
             truncation=True,
             max_length=self.config.max_length,
