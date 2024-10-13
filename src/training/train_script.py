@@ -1,10 +1,10 @@
 import logging
 import os
 
+import fire
 import torch
 import torch.nn as nn
 from datasets import load_dataset
-from dotenv import load_dotenv
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -12,10 +12,8 @@ from transformers import get_linear_schedule_with_warmup
 
 import wandb
 from src.data import Mol2MSDataset
-from src.model import Mol2MSModelConfig, Mol2MSModel
+from src.model import Mol2MSModel, Mol2MSModelConfig
 from src.training.config import Mol2MSTrainingConfig
-
-load_dotenv()
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -55,15 +53,21 @@ def collate_fn(batch):
 def train(
     model_config: Mol2MSModelConfig = Mol2MSModelConfig(),
     training_config: Mol2MSTrainingConfig = Mol2MSTrainingConfig(),
+    wandb_project: str = None,
+    wandb_api_key: str = None,
 ):
     logger.info("Starting training process")
 
-    wandb.init(
-        project=os.getenv("WANDB_PROJECT"),
-        config=dict(
-            model_config=vars(model_config), training_config=vars(training_config)
-        ),
-    )
+    if wandb_project is not None and wandb_api_key is not None:
+        wandb.init(
+            project=wandb_project,
+            api_key=wandb_api_key,
+            config=dict(
+                model_config=vars(model_config), training_config=vars(training_config)
+            ),
+        )
+    else:
+        logger.warning("WANDB_PROJECT and WANDB_API_KEY are not set, skipping Weights & Biases logging")
 
     logger.info(f"Loading dataset: {training_config.dataset_name}")
     hf_dataset = load_dataset(training_config.dataset_name)
@@ -202,4 +206,4 @@ def train(
 
 
 if __name__ == "__main__":
-    train()
+    fire.Fire(train)
