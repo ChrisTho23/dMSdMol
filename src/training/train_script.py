@@ -59,9 +59,9 @@ def train(
     logger.info("Starting training process")
 
     if wandb_project is not None and wandb_api_key is not None:
+        wandb.login(key=wandb_api_key)
         wandb.init(
             project=wandb_project,
-            api_key=wandb_api_key,
             config=dict(
                 model_config=vars(model_config), training_config=vars(training_config)
             ),
