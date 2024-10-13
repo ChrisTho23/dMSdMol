@@ -1,4 +1,4 @@
-torch>=1.6.0
+torch>=2.4.0
 transformers>=4.4.2
 datasets>=1.12.0
 tqdm>=4.62.0
