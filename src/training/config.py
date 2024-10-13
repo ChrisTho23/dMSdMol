@@ -1,8 +1,12 @@
 """Configuration for distributed training on SageMaker."""
 
+import os
 from dataclasses import dataclass, field
-from typing import Any, Dict
+from typing import Any, Dict, List
 
+from dotenv import load_dotenv
+
+load_dotenv()
 
 @dataclass
 class Mol2MSTrainingConfig:
@@ -26,14 +30,6 @@ class Mol2MSTrainingConfig:
         default=0,
         metadata={"help": "Number of warmup steps for learning rate scheduler"}
     )
-    save_every: int = field(
-        default=0,
-        metadata={"help": "Save model every X steps (0 to disable)"}
-    )
-    model_dir: str = field(
-        default="./logs/",
-        metadata={"help": "Directory to save model checkpoints"}
-    )
     max_length: int = field(
         default=128,
         metadata={"help": "Maximum sequence length for tokenization"}
@@ -49,16 +45,16 @@ class Mol2MSTrainingConfig:
 
 @dataclass
 class SageMakerTrainingConfig:
-    output_dir: str = field(
-        default="/opt/ml/output",
-        metadata={"help": "Output directory for SageMaker training job"}
+    aws_region: str = field(
+        default="us-east-1",
+        metadata={"help": "AWS region for SageMaker training"}
     )
     entry_point: str = field(
-        default="train_script.py",
+        default="src/training/train_script.py",
         metadata={"help": "Entry point script for SageMaker training job"}
     )
     source_dir: str = field(
-        default="./src/training",
+        default="./",
         metadata={"help": "Source directory containing the training code"}
     )
     instance_type: str = field(
@@ -69,16 +65,20 @@ class SageMakerTrainingConfig:
         default=1,
         metadata={"help": "Number of EC2 instances to use for training"}
     )
+    output_dir: str = field(
+        default="/opt/ml/output",
+        metadata={"help": "Output directory for SageMaker training job"}
+    )
     transformers_version: str = field(
         default='4.4.2',
         metadata={"help": "Version of Transformers library to use"}
     )
     pytorch_version: str = field(
-        default='1.6.0',
+        default='2.4.0',
         metadata={"help": "Version of PyTorch to use"}
     )
     py_version: str = field(
-        default='py36',
+        default='py311',
         metadata={"help": "Python version to use"}
     )
     git_config: Dict[str, str] = field(
@@ -89,11 +89,18 @@ class SageMakerTrainingConfig:
         default_factory=lambda: {"smdistributed": {"dataparallel": {"enabled": True}}},
         metadata={"help": "Distribution configuration for SageMaker training"}
     )
-    aws_region: str = field(
-        default="us-east-1",
-        metadata={"help": "AWS region for SageMaker training"}
-    )
     hyperparameters: Dict[str, Any] = field(
-        default_factory=lambda: {},
+        default_factory=lambda: {
+            "wandb_project": os.getenv("WANDB_PROJECT"),
+            "wandb_api_key": os.getenv("WANDB_API_KEY")
+        },
         metadata={"help": "Hyperparameters for training"}
+    )
+    dependencies: List[str] = field(
+        default_factory=lambda: ["requirements.txt"],
+        metadata={"help": "Environment variables for SageMaker training"}
+    )
+    image_uri: str = field(
+        default="763104351884.dkr.ecr.us-east-1.amazonaws.com/pytorch-training:2.4.0-gpu-py311-cu124-ubuntu22.04-sagemaker",
+        metadata={"help": "Image URI for SageMaker training"}
     )
