@@ -7,10 +7,8 @@ import fire
 import sagemaker
 from sagemaker.huggingface import HuggingFace
 
-from ..model.bart import BartModel
 from .config import SageMakerTrainingConfig
 from .utils import upload_estimator_to_hf
-
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
@@ -30,23 +28,21 @@ def initiate_sagemaker_session():
 
 def get_sagemaker_estimator(
     role: Any,
-    git_config: Dict[str, str],
-    distribution: Dict[str, Dict[str, bool]],
     train_config: SageMakerTrainingConfig,
-):
+) -> HuggingFace:
     """Creates a SageMaker HuggingFace estimator for distributed training."""
     huggingface_estimator = HuggingFace(
-        entry_point="train_script.py",
-        source_dir="./src/training",
-        git_config=git_config,
+        entry_point=train_config.entry_point,
+        source_dir=train_config.source_dir,
+        git_config=train_config.git_config,
         instance_type=train_config.instance_type,
         instance_count=train_config.instance_count,
-        transformers_version="4.45",
-        pytorch_version="2.4",
-        py_version="py310",
+        transformers_version=train_config.transformers_version,
+        pytorch_version=train_config.pytorch_version,
+        py_version=train_config.py_version,
         role=role,
         hyperparameters=train_config.hyperparameters,
-        distribution=distribution,
+        distribution=train_config.distribution,
     )
     return huggingface_estimator
 
@@ -56,16 +52,9 @@ def train(
 ):
     sess, role = initiate_sagemaker_session()
 
-    git_config = {"repo": train_config.repo, "branch": train_config.branch}
-    distribution = {
-        "smdistributed": {"dataparallel": {"enabled": train_config.dataparallel}}
-    }
-
     logger.info("Creating SageMaker estimator...")
     estimator = get_sagemaker_estimator(
         role=role,
-        git_config=git_config,
-        distribution=distribution,
         train_config=train_config,
     )
 
