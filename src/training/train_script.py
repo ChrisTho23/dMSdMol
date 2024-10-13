@@ -58,7 +58,7 @@ def train(
 ):
     logger.info("Starting training process")
 
-    if wandb_project is not None and wandb_api_key is not None:
+    if wandb_project and wandb_api_key:
         wandb.login(key=wandb_api_key)
         wandb.init(
             project=wandb_project,
@@ -193,14 +193,6 @@ def train(
         avg_val_loss = val_loss / len(val_loader)
         logger.info(f"Validation Loss: {avg_val_loss:.4f}")
         wandb.log({"val_loss": avg_val_loss, "epoch": epoch + 1})
-
-        if (epoch + 1) % training_config.save_every == 0:
-            save_path = os.path.join(
-                training_config.model_dir, f"model_epoch_{epoch+1}"
-            )
-            os.makedirs(save_path, exist_ok=True)
-            model.save(save_path)
-            logger.info(f"Model saved to {save_path}")
 
     logger.info("Training completed")
 
