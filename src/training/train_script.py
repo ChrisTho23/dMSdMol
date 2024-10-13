@@ -14,7 +14,7 @@ from transformers import get_linear_schedule_with_warmup
 import wandb
 from src.data import Mol2MSDataset
 from src.model import Mol2MSModelConfig, Mol2MSModel
-from src.training.config import SageMakerTrainingConfig
+from src.training.config import Mol2MSTrainingConfig
 
 load_dotenv()
 
@@ -55,7 +55,7 @@ def collate_fn(batch):
 
 def train(
     model_config: Mol2MSModelConfig = Mol2MSModelConfig(),
-    training_config: SageMakerTrainingConfig = SageMakerTrainingConfig(),
+    training_config: Mol2MSTrainingConfig = Mol2MSTrainingConfig(),
 ):
     logger.info("Starting training process")
 

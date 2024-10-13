@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 
 @dataclass
-class SageMakerTrainingConfig:
+class Mol2MSTrainingConfig:
     dataset_name: str = "ChrisTho/dMSdMol_dummy_data"
     batch_size: int = 32
     learning_rate: float = 5e-5
