@@ -58,21 +58,22 @@ def get_sagemaker_estimator(
 def train(
     train_config: SageMakerTrainingConfig = SageMakerTrainingConfig(),
 ):
-    sess, role = initiate_sagemaker_session()
+    sess, role = initiate_sagemaker_session(train_config)
 
     logger.info("Creating SageMaker estimator...")
     estimator = get_sagemaker_estimator(
         role=role,
+        sess=sess,
         train_config=train_config,
     )
 
     logger.info("Launched training job...")
     estimator.fit()
 
-    logger.info("Training complete. Uploading model to Hugging Face...")
-    upload_estimator_to_hf(estimator, train_config.model_name)
+    # logger.info("Training complete. Uploading model to Hugging Face...")
+    # upload_estimator_to_hf(estimator, train_config.model_name)
 
-    logger.info("Model uploaded to Hugging Face.")
+    # logger.info("Model uploaded to Hugging Face.")
 
 
 if __name__ == "__main__":
