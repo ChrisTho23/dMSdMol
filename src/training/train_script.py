@@ -1,7 +1,6 @@
 import logging
 import os
 
-import fire
 import torch
 import torch.nn as nn
 from datasets import load_dataset
@@ -203,4 +202,4 @@ def train(
 
 
 if __name__ == "__main__":
-    fire.Fire(train)
+    train()
