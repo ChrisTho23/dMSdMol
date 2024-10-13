@@ -1,7 +1,7 @@
 """Script to launch distributed training job on SageMaker."""
 
 import logging
-from typing import Any, Dict
+from typing import Any
 
 import boto3
 import fire
@@ -48,9 +48,11 @@ def get_sagemaker_estimator(
         pytorch_version=train_config.pytorch_version,
         py_version=train_config.py_version,
         role=role,
+        dependencies=train_config.dependencies,
         hyperparameters=train_config.hyperparameters,
         distribution=train_config.distribution,
         sagemaker_session=sess,
+        image_uri=train_config.image_uri,
     )
     return huggingface_estimator
 
