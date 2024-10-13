@@ -5,11 +5,11 @@ import torch.nn as nn
 from jaxtyping import Float, Int
 from transformers import AutoModel, AutoTokenizer
 
-from .config import BartModelConfig
+from .config import Mol2MSModelConfig
 
 
 class Mol2MSModel(nn.Module):
-    def __init__(self, config: BartModelConfig = BartModelConfig()):
+    def __init__(self, config: Mol2MSModelConfig):
         super().__init__()
         self.config = config
         self.tokenizer = AutoTokenizer.from_pretrained(self.config.encoder_name)
