@@ -3,22 +3,28 @@
 import logging
 from typing import Any, Dict
 
+import boto3
 import fire
 import sagemaker
 from sagemaker.huggingface import HuggingFace
 
-from .config import SageMakerTrainingConfig
-from .utils import upload_estimator_to_hf
+from src.training.config import SageMakerTrainingConfig
+from src.training.utils import upload_estimator_to_hf
+
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
 
-def initiate_sagemaker_session():
+def initiate_sagemaker_session(train_config: SageMakerTrainingConfig):
     """Initializes a SageMaker session and retrieves the execution role. Only works in SageMaker."""
-    sess = sagemaker.Session()
-    role = sagemaker.get_execution_role()
+    boto_session = boto3.Session(region_name=train_config.aws_region)
+    
+    sess = sagemaker.Session(boto_session=boto_session)
+
+    iam_client = boto_session.client('iam', region_name=train_config.aws_region)
+    role = iam_client.get_role(RoleName='AmazonSageMaker-ExecutionRole-20241008T214280')['Role']['Arn']
 
     logger.info(f"SageMaker session: {sess}")
     logger.info(f"SageMaker role: {role}")
@@ -28,6 +34,7 @@ def initiate_sagemaker_session():
 
 def get_sagemaker_estimator(
     role: Any,
+    sess: Any,
     train_config: SageMakerTrainingConfig,
 ) -> HuggingFace:
     """Creates a SageMaker HuggingFace estimator for distributed training."""
@@ -43,6 +50,7 @@ def get_sagemaker_estimator(
         role=role,
         hyperparameters=train_config.hyperparameters,
         distribution=train_config.distribution,
+        sagemaker_session=sess,
     )
     return huggingface_estimator
 
