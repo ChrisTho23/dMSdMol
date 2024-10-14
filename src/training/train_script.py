@@ -9,6 +9,7 @@ from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import get_linear_schedule_with_warmup
+import smdistributed.dataparallel.torch.torch_smddp
 
 from src.data import Mol2MSDataset
 from src.model import Mol2MSModel, Mol2MSModelConfig
