@@ -47,7 +47,7 @@ class SageMakerTrainingConfig:
         default="./", metadata={"help": "Source directory containing the training code"}
     )
     instance_type: str = field(
-        default="ml.p3.2xlarge", metadata={"help": "EC2 instance type for training"}
+        default="ml.p3.16xlarge", metadata={"help": "EC2 instance type for training"}
     )
     instance_count: int = field(
         default=1, metadata={"help": "Number of EC2 instances to use for training"}
@@ -57,16 +57,16 @@ class SageMakerTrainingConfig:
         metadata={"help": "Output directory for SageMaker training job"},
     )
     transformers_version: str = field(
-        default="4.4.2", metadata={"help": "Version of Transformers library to use"}
+        default="4.28.1", metadata={"help": "Version of Transformers library to use"}
     )
     pytorch_version: str = field(
-        default="2.4.0", metadata={"help": "Version of PyTorch to use"}
+        default="2.0.0", metadata={"help": "Version of PyTorch to use"}
     )
-    py_version: str = field(default="py311", metadata={"help": "Python version to use"})
+    py_version: str = field(default="py310", metadata={"help": "Python version to use"})
     git_config: Dict[str, str] = field(
         default_factory=lambda: {
             "repo": "https://github.com/ChrisTho23/dMSdMol",
-            "branch": "main",
+            "branch": "fix-dp",
         },
         metadata={"help": "Git configuration for source code"},
     )
@@ -86,6 +86,6 @@ class SageMakerTrainingConfig:
         metadata={"help": "Environment variables for SageMaker training"},
     )
     image_uri: str = field(
-        default="763104351884.dkr.ecr.us-east-1.amazonaws.com/pytorch-training:2.4.0-gpu-py311-cu124-ubuntu22.04-sagemaker",
+        default="763104351884.dkr.ecr.us-east-1.amazonaws.com/huggingface-pytorch-training:2.0.0-transformers4.28.1-gpu-py310-cu118-ubuntu20.04",
         metadata={"help": "Image URI for SageMaker training"},
     )
