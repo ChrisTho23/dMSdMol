@@ -4,7 +4,9 @@ from dataclasses import dataclass
 
 
 @dataclass
-class BartModelConfig:
-    model_name: str = "facebook/bart-large"
+class Mol2MSModelConfig:
+    encoder_name: str = "gayane/BARTSmiles"
     max_length: int = 128
-    output_dir: str = "./bart-chem-model"
+    max_ms_length: int = 1000
+    num_heads: int = 8
+    num_layers: int = 3
