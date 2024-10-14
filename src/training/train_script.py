@@ -1,17 +1,10 @@
-import sys
-sys.path.append('/Users/aaronfanous/Documents/EnvedaChallenge/dMSdMol2')
-
 import logging
 import os
 
 import fire
 import torch
 import torch.nn as nn
-from datasets import load_dataset, Dataset
-#testing
-import pandas as pd
-from src.data.load_data import load_and_split_parquet
-from dotenv import load_dotenv
+from datasets import load_dataset
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -19,9 +12,8 @@ from transformers import get_linear_schedule_with_warmup
 
 import wandb
 from src.data import Mol2MSDataset
-from src.model.mol2ms import BartModelConfig, Mol2MSModel
-from src.training.config import SageMakerTrainingConfig
-
+from src.model import Mol2MSModel, Mol2MSModelConfig
+from src.training.config import Mol2MSTrainingConfig
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -59,26 +51,26 @@ def collate_fn(batch):
 
 
 def train(
-    model_config: BartModelConfig = BartModelConfig(),
-    training_config: SageMakerTrainingConfig = SageMakerTrainingConfig(),
+    model_config: Mol2MSModelConfig = Mol2MSModelConfig(),
+    training_config: Mol2MSTrainingConfig = Mol2MSTrainingConfig(),
+    wandb_project: str = None,
+    wandb_api_key: str = None,
 ):
     logger.info("Starting training process")
 
-    wandb.init(
-        project=os.getenv("WANDB_PROJECT"),
-        config=dict(
-            model_config=vars(model_config), training_config=vars(training_config)
-        ),
-    )
+    if wandb_project and wandb_api_key:
+        wandb.login(key=wandb_api_key)
+        wandb.init(
+            project=wandb_project,
+            config=dict(
+                model_config=vars(model_config), training_config=vars(training_config)
+            ),
+        )
+    else:
+        logger.warning("WANDB_PROJECT and WANDB_API_KEY are not set, skipping Weights & Biases logging")
 
     logger.info(f"Loading dataset: {training_config.dataset_name}")
-    
-    hf_dataset =load_and_split_parquet("/Users/aaronfanous/Downloads/enveda_library_subset.parquet")
-    
-
-     
-    # hf_dataset = load_dataset(training_config.dataset_name)
-    
+    hf_dataset = load_dataset(training_config.dataset_name)
     train_dataset = Mol2MSDataset(
         hf_dataset["train"],
         model_config.encoder_name,
@@ -201,14 +193,6 @@ def train(
         avg_val_loss = val_loss / len(val_loader)
         logger.info(f"Validation Loss: {avg_val_loss:.4f}")
         wandb.log({"val_loss": avg_val_loss, "epoch": epoch + 1})
-
-        if (epoch + 1) % training_config.save_every == 0:
-            save_path = os.path.join(
-                training_config.model_dir, f"model_epoch_{epoch+1}"
-            )
-            os.makedirs(save_path, exist_ok=True)
-            model.save(save_path)
-            logger.info(f"Model saved to {save_path}")
 
     logger.info("Training completed")
 

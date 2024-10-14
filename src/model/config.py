@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 
 @dataclass
-class BartModelConfig:
+class Mol2MSModelConfig:
     encoder_name: str = "gayane/BARTSmiles"
     max_length: int = 128
     max_ms_length: int = 1000
