@@ -11,7 +11,7 @@ load_dotenv()
 @dataclass
 class Mol2MSTrainingConfig:
     dataset_name: str = field(
-        default="ChrisTho/dMSdMol_dummy_data",
+        default="ChrisTho/mol2ms_enveda", # ChrisTho/dMSdMol_dummy_data
         metadata={"help": "Name of the dataset to use for training"}
     )
     batch_size: int = field(
@@ -58,7 +58,7 @@ class SageMakerTrainingConfig:
         metadata={"help": "Source directory containing the training code"}
     )
     instance_type: str = field(
-        default="ml.p3.2xlarge",
+        default="ml.p3.8xlarge",
         metadata={"help": "EC2 instance type for training"}
     )
     instance_count: int = field(
@@ -82,7 +82,7 @@ class SageMakerTrainingConfig:
         metadata={"help": "Python version to use"}
     )
     git_config: Dict[str, str] = field(
-        default_factory=lambda: {"repo": "https://github.com/ChrisTho23/dMSdMol", "branch": "sagemaker-training"},
+        default_factory=lambda: {"repo": "https://github.com/ChrisTho23/dMSdMol", "branch": "load-data"},
         metadata={"help": "Git configuration for source code"}
     )
     distribution: Dict[str, Dict[str, bool]] = field(
