@@ -20,11 +20,13 @@ logger = logging.getLogger(__name__)
 def initiate_sagemaker_session(train_config: SageMakerTrainingConfig):
     """Initializes a SageMaker session and retrieves the execution role. Only works in SageMaker."""
     boto_session = boto3.Session(region_name=train_config.aws_region)
-    
+
     sess = sagemaker.Session(boto_session=boto_session)
 
-    iam_client = boto_session.client('iam', region_name=train_config.aws_region)
-    role = iam_client.get_role(RoleName='AmazonSageMaker-ExecutionRole-20241008T214280')['Role']['Arn']
+    iam_client = boto_session.client("iam", region_name=train_config.aws_region)
+    role = iam_client.get_role(
+        RoleName="AmazonSageMaker-ExecutionRole-20241008T214280"
+    )["Role"]["Arn"]
 
     logger.info(f"SageMaker session: {sess}")
     logger.info(f"SageMaker role: {role}")

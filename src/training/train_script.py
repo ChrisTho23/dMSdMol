@@ -67,7 +67,9 @@ def train(
             ),
         )
     else:
-        logger.warning("WANDB_PROJECT and WANDB_API_KEY are not set, skipping Weights & Biases logging")
+        logger.warning(
+            "WANDB_PROJECT and WANDB_API_KEY are not set, skipping Weights & Biases logging"
+        )
 
     logger.info(f"Loading dataset: {training_config.dataset_name}")
     hf_dataset = load_dataset(training_config.dataset_name)

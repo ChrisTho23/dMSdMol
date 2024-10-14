@@ -25,13 +25,11 @@ hf_username = os.getenv("HF_USERNAME")
 def load_from_s3(bucket_path: str, file_name: str):
     # Set up S3 client
     s3 = boto3.client(
-        's3',
-        region_name='us-east-1',
-        endpoint_url='https://s3.amazonaws.com'
+        "s3", region_name="us-east-1", endpoint_url="https://s3.amazonaws.com"
     )
     bucket_name = "team4-bucket-hackathon"
 
-    data_dir = os.path.join(os.getcwd(), 'data')
+    data_dir = os.path.join(os.getcwd(), "data")
     os.makedirs(data_dir, exist_ok=True)
 
     local_file_path = os.path.join(data_dir, file_name)
@@ -42,9 +40,12 @@ def load_from_s3(bucket_path: str, file_name: str):
 
     return df
 
+
 def load_data(local_file_path: str = None):
     if local_file_path is None:
-        df = load_from_s3("team4-bucket-hackathon", "enveda-dataset/enveda_library_subset.parquet")
+        df = load_from_s3(
+            "team4-bucket-hackathon", "enveda-dataset/enveda_library_subset.parquet"
+        )
     else:
         df = pd.read_parquet(local_file_path)
     return df
@@ -52,19 +53,26 @@ def load_data(local_file_path: str = None):
 
 def df_to_dataset(df):
     columns_to_keep = [
-        "precursor_mz", "precursor_charge", "mzs", "intensities",
-        "collision_energy", "instrument_type", "in_silico", "smiles",
-        "adduct", "compound_class"
+        "precursor_mz",
+        "precursor_charge",
+        "mzs",
+        "intensities",
+        "collision_energy",
+        "instrument_type",
+        "in_silico",
+        "smiles",
+        "adduct",
+        "compound_class",
     ]
     df = df[columns_to_keep].copy()
 
     # Convert data types to match our features
-    df['precursor_mz'] = df['precursor_mz'].astype('float32')
-    df['precursor_charge'] = df['precursor_charge'].astype('int32')
-    df['mzs'] = df['mzs'].apply(lambda x: [np.float32(i) for i in x])
-    df['intensities'] = df['intensities'].apply(lambda x: [np.float32(i) for i in x])
+    df["precursor_mz"] = df["precursor_mz"].astype("float32")
+    df["precursor_charge"] = df["precursor_charge"].astype("int32")
+    df["mzs"] = df["mzs"].apply(lambda x: [np.float32(i) for i in x])
+    df["intensities"] = df["intensities"].apply(lambda x: [np.float32(i) for i in x])
     df["compound_class"] = df["compound_class"].astype("string")
-    
+
     features = Features(
         {
             "precursor_mz": Value("float32"),
@@ -109,7 +117,7 @@ def main(local_enveda_path: str, repo_name: str):  # local_nist_path
 
     # df = pd.concat([enveda_df, nist_df])
 
-    dataset = df_to_dataset(enveda_df) # df
+    dataset = df_to_dataset(enveda_df)  # df
 
     dataset_to_hub(dataset, repo_name, hf_username, hf_token)
     logger.info(f"Dataset '{repo_name}' uploaded successfully.")
