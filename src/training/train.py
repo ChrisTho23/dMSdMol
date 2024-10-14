@@ -1,10 +1,16 @@
+import sys
+sys.path.append('/Users/aaronfanous/Documents/EnvedaChallenge/dMSdMol2')
+
 import logging
 import os
 
 import fire
 import torch
 import torch.nn as nn
-from datasets import load_dataset
+from datasets import load_dataset, Dataset
+#testing
+import pandas as pd
+from src.data.load_data import load_and_split_parquet
 from dotenv import load_dotenv
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader
@@ -16,7 +22,6 @@ from src.data import Mol2MSDataset
 from src.model.mol2ms import BartModelConfig, Mol2MSModel
 from src.training.config import SageMakerTrainingConfig
 
-load_dotenv()
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -67,7 +72,13 @@ def train(
     )
 
     logger.info(f"Loading dataset: {training_config.dataset_name}")
-    hf_dataset = load_dataset(training_config.dataset_name)
+    
+    hf_dataset =load_and_split_parquet("/Users/aaronfanous/Downloads/enveda_library_subset.parquet")
+    
+
+     
+    # hf_dataset = load_dataset(training_config.dataset_name)
+    
     train_dataset = Mol2MSDataset(
         hf_dataset["train"],
         model_config.encoder_name,

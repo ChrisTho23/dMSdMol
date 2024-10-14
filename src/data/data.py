@@ -4,8 +4,9 @@ import torch
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer
 
-
+#TODO: include the EV stuff. 
 class Mol2MSDataset(Dataset):
+
     def __init__(
         self, hf_dataset: Dataset, model_name: str, max_ms_length: int, max_length: int
     ):
@@ -21,9 +22,10 @@ class Mol2MSDataset(Dataset):
 
     def __len__(self):
         return len(self.dataset)
-
+    
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
         item = self.dataset[idx]
+        
 
         smiles_encoding = self.tokenizer(
             item["smiles"],
@@ -73,3 +75,5 @@ class Mol2MSDataset(Dataset):
             "index": index_tensor,
             "create_next_token": create_next_token_tensor,
         }
+
+

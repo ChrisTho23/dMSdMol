@@ -5,7 +5,7 @@ import os
 import fire
 from datasets import Dataset, DatasetDict, Features, Sequence, Value
 from dotenv import load_dotenv
-from utils import dataset_to_hub
+from .utils import dataset_to_hub
 
 load_dotenv()
 hf_token = os.getenv("HF_TOKEN")

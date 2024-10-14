@@ -9,7 +9,8 @@ import pandas as pd
 from datasets import Dataset, DatasetDict, Features, Sequence, Value
 from dotenv import load_dotenv
 from sklearn.model_selection import train_test_split
-from utils import dataset_to_hub
+from src.data.utils import dataset_to_hub
+
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -70,7 +71,38 @@ def df_to_dataset(df):
     )
 
     return dataset_dict
+from datasets import load_dataset, DatasetDict
 
+def load_and_split_parquet(file_path, test_size=0.2, validation_size=0.1, seed=42):
+    """
+    Loads a Parquet file and splits it into train, test, and validation sets.
+
+    Parameters:
+        file_path (str): Path to the Parquet file.
+        test_size (float): Proportion of the dataset to include in the test split.
+        validation_size (float): Proportion of the training set to include in the validation split.
+        seed (int): Random seed for reproducibility.
+
+    Returns:
+        DatasetDict: A dictionary containing train, test, and validation splits.
+    """
+    # Load the dataset from the Parquet file
+    dataset = load_dataset("parquet", data_files=file_path)["train"]
+
+    # Split into train and test sets
+    train_test_split = dataset.train_test_split(test_size=test_size, seed=seed)
+
+    # Further split the training set to create a validation set
+    train_validation_split = train_test_split["train"].train_test_split(test_size=validation_size, seed=seed)
+
+    # Organize splits into a DatasetDict
+    dataset_dict = DatasetDict({
+        "train": train_validation_split["train"],
+        "test": train_test_split["test"],
+        "validation": train_validation_split["test"]
+    })
+
+    return dataset_dict
 
 def main(nist_file_name, enveda_file_name, repo_name):  # repo_name
     nist_df = load_from_s3(nist_file_name)
