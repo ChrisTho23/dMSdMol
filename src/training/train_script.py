@@ -8,8 +8,8 @@ from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import get_linear_schedule_with_warmup
-import wandb
 
+import wandb
 from src.data import Mol2MSDataset
 from src.model import Mol2MSModel, Mol2MSModelConfig
 from src.training.config import Mol2MSTrainingConfig
