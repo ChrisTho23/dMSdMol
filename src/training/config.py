@@ -58,11 +58,11 @@ class SageMakerTrainingConfig:
         metadata={"help": "Source directory containing the training code"}
     )
     instance_type: str = field(
-        default="ml.p3.2xlarge",
+        default="ml.p3.8xlarge",
         metadata={"help": "EC2 instance type for training"}
     )
     instance_count: int = field(
-        default=2,
+        default=1,
         metadata={"help": "Number of EC2 instances to use for training"}
     )
     output_dir: str = field(
