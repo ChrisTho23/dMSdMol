@@ -47,7 +47,7 @@ class SageMakerTrainingConfig:
         default="./", metadata={"help": "Source directory containing the training code"}
     )
     instance_type: str = field(
-        default="ml.p3.16xlarge", metadata={"help": "EC2 instance type for training"}
+        default="ml.p3.2xlarge", metadata={"help": "EC2 instance type for training"}
     )
     instance_count: int = field(
         default=1, metadata={"help": "Number of EC2 instances to use for training"}
@@ -66,7 +66,7 @@ class SageMakerTrainingConfig:
     git_config: Dict[str, str] = field(
         default_factory=lambda: {
             "repo": "https://github.com/ChrisTho23/dMSdMol",
-            "branch": "pt-implementation",
+            "branch": "main",
         },
         metadata={"help": "Git configuration for source code"},
     )
