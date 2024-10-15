@@ -10,10 +10,13 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import get_linear_schedule_with_warmup
 import smdistributed.dataparallel.torch.torch_smddp
+import torch.distributed as dist
 
 from src.data import Mol2MSDataset
 from src.model import Mol2MSModel, Mol2MSModelConfig
 from src.training.config import Mol2MSTrainingConfig
+
+dist.init_process_group(backend="smddp")
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
