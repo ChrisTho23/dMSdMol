@@ -152,6 +152,8 @@ def train(
             input_ids = batch["input_ids"].to(device)
             attention_mask = batch["attention_mask"].to(device)
             index = batch["index"].to(device)
+            collision_energy = batch["collision_energy"].to(device)
+            instrument_type = batch["instrument_type"].to(device)
             mz = batch["mz"].to(device)
             intensity = batch["intensity"].to(device)
             create_next_token = batch["create_next_token"].to(device)
@@ -159,7 +161,7 @@ def train(
             optimizer.zero_grad()
 
             mz_pred, intensity_pred, create_next_token_pred = model(
-                input_ids, attention_mask, index
+                input_ids, attention_mask, index, collision_energy, instrument_type
             )
 
             loss_mz = mse_loss(mz_pred, mz)
