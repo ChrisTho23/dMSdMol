@@ -41,6 +41,8 @@ def collate_fn(batch):
     mz = torch.stack([item["mz"] for item in batch])
     intensity = torch.stack([item["intensity"] for item in batch])
     index = torch.stack([item["index"] for item in batch])
+    collision_energy = torch.stack([item["collision_energy"] for item in batch])
+    instrument_type = torch.stack([item["instrument_type"] for item in batch])
     create_next_token = torch.stack([item["create_next_token"] for item in batch])
 
     return {
@@ -49,6 +51,8 @@ def collate_fn(batch):
         "mz": mz,
         "intensity": intensity,
         "index": index,
+        "collision_energy": collision_energy,
+        "instrument_type": instrument_type,
         "create_next_token": create_next_token,
     }
 
