@@ -177,6 +177,7 @@ def train(
                         "mz_loss": loss_mz.item(),
                         "intensity_loss": loss_intensity.item(),
                         "create_next_token_loss": loss_create_next_token.item(),
+                        "train_loss": loss.item(),
                     }
                 )
                 progress_bar.set_postfix({"loss": f"{loss.item():.4f}"})
