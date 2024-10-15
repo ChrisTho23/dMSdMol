@@ -120,11 +120,11 @@ sympy==1.13.3
 tblib==3.0.0
 termcolor==2.5.0
 threadpoolctl==3.5.0
-tokenizers==0.20.1
+tokenizers==0.13.0
 tomli==2.0.2
-torch==2.4.1
+torch==2.2.0
 tqdm==4.66.5
-transformers==4.45.2
+transformers==4.28.1
 typeguard==2.13.3
 typing_extensions==4.12.2
 tzdata==2024.2
