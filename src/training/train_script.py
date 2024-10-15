@@ -1,7 +1,9 @@
 import logging
 
 import fire
+import smdistributed.dataparallel.torch.torch_smddp
 import torch
+import torch.distributed as dist
 import torch.nn as nn
 import wandb
 from datasets import load_dataset
@@ -9,8 +11,6 @@ from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader, DistributedSampler
 from tqdm import tqdm
 from transformers import get_linear_schedule_with_warmup
-import smdistributed.dataparallel.torch.torch_smddp
-import torch.distributed as dist
 
 from src.data import Mol2MSDataset
 from src.model import Mol2MSModel, Mol2MSModelConfig
@@ -77,8 +77,12 @@ def train(
     logger.info(f"Loading dataset: {training_config.dataset_name}")
     hf_dataset = load_dataset(training_config.dataset_name)
 
-    train_sampler = DistributedSampler(hf_dataset["train"], num_replicas=dist.get_world_size(), rank=dist.get_rank())
-    val_sampler = DistributedSampler(hf_dataset["test"], num_replicas=dist.get_world_size(), rank=dist.get_rank())
+    train_sampler = DistributedSampler(
+        hf_dataset["train"], num_replicas=dist.get_world_size(), rank=dist.get_rank()
+    )
+    val_sampler = DistributedSampler(
+        hf_dataset["test"], num_replicas=dist.get_world_size(), rank=dist.get_rank()
+    )
 
     train_dataset = Mol2MSDataset(
         hf_dataset["train"],
@@ -111,7 +115,9 @@ def train(
 
     logger.info("Initializing model")
     model = Mol2MSModel(model_config).to(device)
-    model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[dist.get_rank()])
+    model = torch.nn.parallel.DistributedDataParallel(
+        model, device_ids=[dist.get_rank()]
+    )
     if dist.get_rank() == 0:
         wandb.watch(model)
 
@@ -133,9 +139,11 @@ def train(
         total_loss = 0
 
         train_loader.sampler.set_epoch(epoch)
-        progress_bar = tqdm(
-            train_loader, desc=f"Epoch {epoch+1}/{training_config.num_epochs}"
-        ) if dist.get_rank() == 0 else train_loader
+        progress_bar = (
+            tqdm(train_loader, desc=f"Epoch {epoch+1}/{training_config.num_epochs}")
+            if dist.get_rank() == 0
+            else train_loader
+        )
         for batch_idx, batch in enumerate(progress_bar):
             input_ids = batch["input_ids"].to(device)
             attention_mask = batch["attention_mask"].to(device)
@@ -166,9 +174,9 @@ def train(
             if dist.get_rank() == 0:
                 wandb.log(
                     {
-                    "mz_loss": loss_mz.item(),
-                    "intensity_loss": loss_intensity.item(),
-                    "create_next_token_loss": loss_create_next_token.item(),
+                        "mz_loss": loss_mz.item(),
+                        "intensity_loss": loss_intensity.item(),
+                        "create_next_token_loss": loss_create_next_token.item(),
                     }
                 )
                 progress_bar.set_postfix({"loss": f"{loss.item():.4f}"})
@@ -183,7 +191,11 @@ def train(
         val_loss = 0
 
         with torch.no_grad():
-            for batch in tqdm(val_loader, desc="Validation") if dist.get_rank() == 0 else val_loader:
+            for batch in (
+                tqdm(val_loader, desc="Validation")
+                if dist.get_rank() == 0
+                else val_loader
+            ):
                 input_ids = batch["input_ids"].to(device)
                 attention_mask = batch["attention_mask"].to(device)
                 index = batch["index"].to(device)
