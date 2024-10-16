@@ -4,7 +4,6 @@ import torch
 import torch.nn as nn
 from jaxtyping import Float, Int
 from transformers import AutoModel, AutoTokenizer
-#from .embedders import Mol2MSModelEmbedding
 from .config import Mol2MSModelConfig
 
 
@@ -13,15 +12,7 @@ class Mol2MSModel(nn.Module):
         super().__init__()
         self.config = config
         self.tokenizer = AutoTokenizer.from_pretrained(self.config.encoder_name)
-
         self.encoder = AutoModel.from_pretrained(self.config.encoder_name).encoder
-        
-        
-        
-        
-        #self.encoder.embed_tokens = customEmbedding
-
-
 
         # Custom decoder
         self.decoder = nn.TransformerDecoder(

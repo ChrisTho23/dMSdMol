@@ -74,6 +74,8 @@ class Mol2MSDataset(Dataset):
             "intensity": intensity_tensor,
             "index": index_tensor,
             "create_next_token": create_next_token_tensor,
+            
         }
+ 
 
 
