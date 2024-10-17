@@ -108,13 +108,11 @@ def train(
     train_dataset = Mol2MSDataset(
         hf_dataset["train"],
         model_config.encoder_name,
-        model_config.max_ms_length,
         model_config.max_length,
     )
     val_dataset = Mol2MSDataset(
         hf_dataset["test"],
         model_config.encoder_name,
-        model_config.max_ms_length,
         model_config.max_length,
     )
 
@@ -150,9 +148,6 @@ def train(
         num_training_steps=total_steps,
     )
 
-    mse_loss = nn.MSELoss()
-    bce_loss = nn.BCELoss()
-
     logger.info("Starting training")
     for epoch in range(training_config.num_epochs):
         logger.info(f"Starting epoch {epoch+1}/{training_config.num_epochs}")
@@ -166,28 +161,24 @@ def train(
             else train_loader
         )
         for batch_idx, batch in enumerate(progress_bar):
-            input_ids = batch["input_ids"].to(device)
+            tokenized_smiles = batch["tokenized_smiles"].to(device)
             attention_mask = batch["attention_mask"].to(device)
             index = batch["index"].to(device)
             collision_energy = batch["collision_energy"].to(device)
             instrument_type = batch["instrument_type"].to(device)
             mz = batch["mz"].to(device)
             intensity = batch["intensity"].to(device)
-            create_next_token = batch["create_next_token"].to(device)
+            stop_token = batch["stop_token"].to(device)
 
             optimizer.zero_grad()
 
-            mz_pred, intensity_pred, create_next_token_pred = model(
-                input_ids, attention_mask, index, collision_energy, instrument_type
+            mz_pred, intensity_pred, stop_token_pred = model(
+                tokenized_smiles, attention_mask, index, collision_energy, instrument_type
             )
 
-            loss_mz = mse_loss(mz_pred, mz)
-            loss_intensity = mse_loss(intensity_pred, intensity)
-            loss_create_next_token = bce_loss(
-                create_next_token_pred, create_next_token.float()
+            loss, loss_mz, loss_intensity, loss_stop_token = calculate_loss(
+                mz_pred, mz, intensity_pred, intensity, stop_token_pred, stop_token
             )
-
-            loss = loss_mz + loss_intensity + loss_create_next_token
             total_loss += loss.item()
 
             loss.backward()
@@ -199,7 +190,7 @@ def train(
                     {
                         "mz_loss": loss_mz.item(),
                         "intensity_loss": loss_intensity.item(),
-                        "create_next_token_loss": loss_create_next_token.item(),
+                        "stop_token_loss": loss_stop_token.item(),
                         "train_loss": loss.item(),
                     }
                 )
@@ -220,26 +211,22 @@ def train(
                 if dist.get_rank() == 0
                 else val_loader
             ):
-                input_ids = batch["input_ids"].to(device)
+                tokenized_smiles = batch["tokenized_smiles"].to(device)
                 attention_mask = batch["attention_mask"].to(device)
                 index = batch["index"].to(device)
                 collision_energy = batch["collision_energy"].to(device)
                 instrument_type = batch["instrument_type"].to(device)
                 mz = batch["mz"].to(device)
                 intensity = batch["intensity"].to(device)
-                create_next_token = batch["create_next_token"].to(device)
+                stop_token = batch["stop_token"].to(device)
 
-                mz_pred, intensity_pred, create_next_token_pred = model(
-                    input_ids, attention_mask, index, collision_energy, instrument_type
+                mz_pred, intensity_pred, stop_token_pred = model(
+                    tokenized_smiles, attention_mask, index, collision_energy, instrument_type
                 )
 
-                loss_mz = mse_loss(mz_pred, mz)
-                loss_intensity = mse_loss(intensity_pred, intensity)
-                loss_create_next_token = bce_loss(
-                    create_next_token_pred, create_next_token.float()
+                loss, _, _, _ = calculate_loss(
+                    mz_pred, mz, intensity_pred, intensity, stop_token_pred, stop_token
                 )
-
-                loss = loss_mz + loss_intensity + loss_create_next_token
                 val_loss += loss.item()
 
         avg_val_loss = val_loss / len(val_loader)
