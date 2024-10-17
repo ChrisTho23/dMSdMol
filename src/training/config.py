@@ -66,7 +66,7 @@ class SageMakerTrainingConfig:
     git_config: Dict[str, str] = field(
         default_factory=lambda: {
             "repo": "https://github.com/ChrisTho23/dMSdMol",
-            "branch": "include-machine",
+            "branch": "main",
         },
         metadata={"help": "Git configuration for source code"},
     )
