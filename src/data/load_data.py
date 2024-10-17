@@ -50,6 +50,10 @@ def load_data(local_file_path: str = None):
         df = pd.read_parquet(local_file_path)
     return df
 
+def gen_from_dataframe(dataframe: pd.DataFrame):
+    for _, row in dataframe.iterrows():
+        yield {col: row[col] for col in dataframe.columns}
+
 
 def df_to_dataset(df):
     columns_to_keep = [
@@ -123,8 +127,6 @@ def df_to_dataset(df):
     
     logger.info(f"Number of samples after expansion: {df.shape[0]}")
 
-    print(df.head())
-
     features = Features(
         {
             "precursor_mz": Value("float32"),
@@ -154,9 +156,9 @@ def df_to_dataset(df):
     val_df = val_df.reset_index(drop=True)
 
     # To hf dataset
-    train_dataset = Dataset.from_pandas(train_df, features=features)
-    test_dataset = Dataset.from_pandas(test_df, features=features)
-    val_dataset = Dataset.from_pandas(val_df, features=features)
+    train_dataset = Dataset.from_generator(lambda: gen_from_dataframe(train_df), features=features)
+    test_dataset = Dataset.from_generator(lambda: gen_from_dataframe(test_df), features=features)
+    val_dataset = Dataset.from_generator(lambda: gen_from_dataframe(val_df), features=features)
 
     dataset_dict = DatasetDict(
         {"train": train_dataset, "test": test_dataset, "validation": val_dataset}
