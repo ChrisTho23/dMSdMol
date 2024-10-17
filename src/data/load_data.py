@@ -66,6 +66,24 @@ def df_to_dataset(df):
     ]
     df = df[columns_to_keep].copy()
 
+    # print number of NaN values in specified fields
+    nan_counts = {
+        'mzs': df['mzs'].isna().sum(),
+        'intensities': df['intensities'].isna().sum(),
+        'collision_energy': df['collision_energy'].isna().sum(),
+        'instrument_type': df['instrument_type'].isna().sum()
+    }
+    
+    logger.info("Number of NaN values:")
+    for field, count in nan_counts.items():
+        logger.info(f"{field}: {count}")
+
+    # Clean dataset
+    df['collision_energy'] = df['collision_energy'].str.extract('(\d+)').astype(float)
+    df = df.dropna(subset=['collision_energy', 'instrument_type'])
+
+    logger.info(f"Number of samples after dropping NaN values: {df.shape[0]}")
+
     # Convert data types to match our features
     df["precursor_mz"] = df["precursor_mz"].astype("float32")
     df["precursor_charge"] = df["precursor_charge"].astype("int32")
