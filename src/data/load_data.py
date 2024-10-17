@@ -91,14 +91,50 @@ def df_to_dataset(df):
     df["intensities"] = df["intensities"].apply(lambda x: [np.float32(i) for i in x])
     df["compound_class"] = df["compound_class"].astype("string")
 
+    # label encoding of collision energy and instrument type
+    df["collision_energy"] = df["collision_energy"].astype("category").cat.codes
+    df["instrument_type"] = df["instrument_type"].astype("category").cat.codes
+
+    # logger.info number of distinct classes
+    logger.info(f"Number of distinct collision energy classes: {df['collision_energy'].nunique()}")
+    logger.info(f"Number of distinct instrument type classes: {df['instrument_type'].nunique()}")
+
+    # Check if mzs and intensities have the same length in every row
+    length_mismatch = df[df['mzs'].apply(len) != df['intensities'].apply(len)]
+    if not length_mismatch.empty:
+        logger.warning(f"Found {len(length_mismatch)} rows where mzs and intensities have different lengths.")
+        logger.warning("Removing these rows from the dataset.")
+        df = df[df['mzs'].apply(len) == df['intensities'].apply(len)]
+        logger.info(f"Number of samples after removing mismatched rows: {df.shape[0]}")
+    else:
+        logger.info("All rows have matching lengths for mzs and intensities.")
+
+    # Expand dataset 
+    df["mz_intensity_pair"] = df.apply(lambda row: list(zip(row["mzs"], row["intensities"])), axis=1)
+    df = df.explode("mz_intensity_pair")
+    df["mzs"], df["intensities"] = [list(col) for col in zip(*df["mz_intensity_pair"])]
+
+    df = df.drop(columns=["mz_intensity_pair"])
+
+    df["index"] = df.groupby(df.index).cumcount().astype(np.int32)
+
+    df["stop_token"] = np.append(np.where(df["index"] == 0, 1, 0)[1:], 1)
+    df["stop_token"] = df["stop_token"].astype(np.int32)
+    
+    logger.info(f"Number of samples after expansion: {df.shape[0]}")
+
+    print(df.head())
+
     features = Features(
         {
             "precursor_mz": Value("float32"),
             "precursor_charge": Value("int32"),
-            "mzs": Sequence(Value("float32")),
-            "intensities": Sequence(Value("float32")),
-            "collision_energy": Value("string"),
-            "instrument_type": Value("string"),
+            "mzs": Value("float32"),
+            "intensities": Value("float32"),
+            "index": Value("int32"),
+            "stop_token": Value("int32"),
+            "collision_energy": Value("int32"),
+            "instrument_type": Value("int32"),
             "in_silico": Value("bool"),
             "smiles": Value("string"),
             "adduct": Value("string"),
