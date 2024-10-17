@@ -59,7 +59,7 @@ def collate_fn(batch):
 
 
 def calculate_loss(
-        mz_pred: , 
+        mz_pred, 
         mz, 
         intensity_pred, 
         intensity, 
