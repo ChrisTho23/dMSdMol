@@ -44,7 +44,7 @@ def collate_fn(batch):
     index = torch.tensor([item["index"] for item in batch], dtype=torch.long).unsqueeze(1)
     collision_energy = torch.tensor([item["collision_energy"] for item in batch], dtype=torch.long).unsqueeze(1)
     instrument_type = torch.tensor([item["instrument_type"] for item in batch], dtype=torch.long).unsqueeze(1)
-    stop_token = torch.tensor([item["stop_token"] for item in batch], dtype=torch.long).unsqueeze(1)
+    stop_token = torch.tensor([item["stop_token"] for item in batch], dtype=torch.float).unsqueeze(1)
 
     return {
         "tokenized_smiles": tokenized_smiles,
