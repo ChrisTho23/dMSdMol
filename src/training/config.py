@@ -15,7 +15,7 @@ class Mol2MSTrainingConfig:
         default="ChrisTho/mol2ms_enveda_machine_test_full",  # ChrisTho/dMSdMol_dummy_data
         metadata={"help": "Name of the dataset to use for training"},
     )
-    batch_size: int = field(default=32, metadata={"help": "Batch size for training"})
+    batch_size: int = field(default=64, metadata={"help": "Batch size for training"})
     learning_rate: float = field(
         default=5e-5, metadata={"help": "Learning rate for training"}
     )

@@ -58,7 +58,14 @@ def collate_fn(batch):
     }
 
 
-def calculate_loss(mz_pred, mz, intensity_pred, intensity, stop_token_pred, stop_token):
+def calculate_loss(
+        mz_pred: , 
+        mz, 
+        intensity_pred, 
+        intensity, 
+        stop_token_pred, 
+        stop_token
+    ):
     mse_loss = nn.MSELoss()
     bce_loss = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([10.0]).to(stop_token.device))
 
