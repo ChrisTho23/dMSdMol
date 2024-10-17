@@ -38,12 +38,13 @@ def collate_fn(batch):
     attention_mask = pad_sequence(
         [item["attention_mask"] for item in batch], batch_first=True, padding_value=0
     )
-    mz = torch.stack([item["mz"] for item in batch])
-    intensity = torch.stack([item["intensity"] for item in batch])
-    index = torch.stack([item["index"] for item in batch])
-    collision_energy = torch.stack([item["collision_energy"] for item in batch])
-    instrument_type = torch.stack([item["instrument_type"] for item in batch])
-    stop_token = torch.stack([item["stop_token"] for item in batch])
+    
+    mz = torch.tensor([item["mz"] for item in batch], dtype=torch.float).unsqueeze(1)
+    intensity = torch.tensor([item["intensity"] for item in batch], dtype=torch.float).unsqueeze(1)
+    index = torch.tensor([item["index"] for item in batch], dtype=torch.long).unsqueeze(1)
+    collision_energy = torch.tensor([item["collision_energy"] for item in batch], dtype=torch.float).unsqueeze(1)
+    instrument_type = torch.tensor([item["instrument_type"] for item in batch], dtype=torch.long).unsqueeze(1)
+    stop_token = torch.tensor([item["stop_token"] for item in batch], dtype=torch.float).unsqueeze(1)
 
     return {
         "tokenized_smiles": tokenized_smiles,
