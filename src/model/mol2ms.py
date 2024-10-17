@@ -72,7 +72,7 @@ class Mol2MSModel(nn.Module):
 
         continuous_output1 = self.continuous_output1(decoder_output).squeeze(-1)
         continuous_output2 = self.continuous_output2(decoder_output).squeeze(-1)
-        binary_output = t.sigmoid(self.binary_output(decoder_output)).squeeze(-1)
+        binary_output = self.binary_output(decoder_output).squeeze(-1)
 
         return continuous_output1, continuous_output2, binary_output
 

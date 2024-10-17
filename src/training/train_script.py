@@ -57,6 +57,23 @@ def collate_fn(batch):
     }
 
 
+def calculate_loss(mz_pred, mz, intensity_pred, intensity, stop_token_pred, stop_token):
+    mse_loss = nn.MSELoss()
+    bce_loss = nn.BCEWithLogitsLoss(weight=torch.tensor([1.0, 10.0]))
+
+    loss_mz = mse_loss(mz_pred, mz)
+    loss_intensity = mse_loss(intensity_pred, intensity)
+    loss_stop_token = bce_loss(stop_token_pred, stop_token.float())
+
+    # Scale losses to be of the same magnitude
+    scaled_loss_mz = loss_mz / torch.mean(mz**2)
+    scaled_loss_intensity = loss_intensity / torch.mean(intensity**2)
+    
+    total_loss = scaled_loss_mz + scaled_loss_intensity + loss_stop_token
+
+    return total_loss, loss_mz, loss_intensity, loss_stop_token
+
+
 def train(
     model_config: Mol2MSModelConfig = Mol2MSModelConfig(),
     training_config: Mol2MSTrainingConfig = Mol2MSTrainingConfig(),
