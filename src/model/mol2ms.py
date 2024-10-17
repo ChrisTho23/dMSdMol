@@ -1,6 +1,6 @@
 """Custom Mol2MS model inspired by BART for MS/MS prediction from SMILES."""
 
-import torch
+import torch as t
 import torch.nn as nn
 from jaxtyping import Float, Int
 from transformers import AutoModel, AutoTokenizer
@@ -28,9 +28,15 @@ class Mol2MSModel(nn.Module):
         self.continuous_output2 = nn.Linear(self.encoder.config.hidden_size, 1)
         self.binary_output = nn.Linear(self.encoder.config.hidden_size, 1)
 
-        # Embedding for integer input
+        # Embeddings
         self.index_embedding = nn.Embedding(
             self.config.max_ms_length, self.encoder.config.hidden_size
+        )
+        self.collision_energy_embedding = nn.Embedding(
+            self.config.collision_energy_dim, self.encoder.config.hidden_size
+        )
+        self.instrument_type_embedding = nn.Embedding(
+            self.config.instrument_type_dim, self.encoder.config.hidden_size
         )
 
         if self.tokenizer.bos_token is None:
@@ -40,26 +46,39 @@ class Mol2MSModel(nn.Module):
 
     def forward(
         self,
-        input_ids: Int[torch.Tensor, "batch seq"],
-        attention_mask: Int[torch.Tensor, "batch seq"],
-        index: Int[torch.Tensor, "batch ms_seq"],
+        tokenized_smiles: Int[t.Tensor, "batch seq"],
+        attention_mask: Int[t.Tensor, "batch seq"],
+        index: Int[t.Tensor, "batch 1"],
+        collision_energy: Int[t.Tensor, "batch 1"],
+        instrument_type: Int[t.Tensor, "batch 1"],
     ) -> tuple[
-        Float[torch.Tensor, "batch"],
-        Float[torch.Tensor, "batch"],
-        Float[torch.Tensor, "batch"],
+        Float[t.Tensor, "batch"],
+        Float[t.Tensor, "batch"],
+        Float[t.Tensor, "batch"],
     ]:
-        encoder_outputs = self.encoder(
-            input_ids=input_ids, attention_mask=attention_mask
+        smiles_encoding = self.encoder(
+            input_ids=tokenized_smiles, attention_mask=attention_mask
         )
-        decoder_input = self.index_embedding(index).transpose(0, 1)
 
-        decoder_outputs = self.decoder(
-            tgt=decoder_input, memory=encoder_outputs.last_hidden_state.transpose(0, 1)
+        index_embedding = self.index_embedding(index).transpose(0, 1)
+        collision_energy_embedding = self.collision_energy_embedding(
+            collision_energy
+        ).transpose(0, 1)
+        instrument_type_embedding = self.instrument_type_embedding(
+            instrument_type
         ).transpose(0, 1)
 
-        continuous_output1 = self.continuous_output1(decoder_outputs).squeeze(-1)
-        continuous_output2 = self.continuous_output2(decoder_outputs).squeeze(-1)
-        binary_output = torch.sigmoid(self.binary_output(decoder_outputs)).squeeze(-1)
+        decoder_input = (
+            index_embedding + collision_energy_embedding + instrument_type_embedding
+        )
+
+        decoder_output = self.decoder(
+            tgt=decoder_input, memory=smiles_encoding.last_hidden_state.transpose(0, 1)
+        ).transpose(0, 1)
+
+        continuous_output1 = self.continuous_output1(decoder_output).squeeze(-1)
+        continuous_output2 = self.continuous_output2(decoder_output).squeeze(-1)
+        binary_output = self.binary_output(decoder_output).squeeze(-1)
 
         return continuous_output1, continuous_output2, binary_output
 
@@ -75,6 +94,6 @@ class Mol2MSModel(nn.Module):
 
     def save(self, path: str):
         """Saves the model and tokenizer to the specified path."""
-        torch.save(self.state_dict(), f"{path}/model.pt")
+        t.save(self.state_dict(), f"{path}/model.pt")
         self.tokenizer.save_pretrained(path)
         print(f"Model and tokenizer saved to {path}")
