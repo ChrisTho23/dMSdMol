@@ -142,13 +142,18 @@ def df_to_dataset(df):
         }
     )
 
-    train_df, test_df = train_test_split(df, test_size=0.2, random_state=42)
-    train_df, val_df = train_test_split(train_df, test_size=0.1, random_state=42)
+    train_indices, test_indices = train_test_split(np.unique(df.index), test_size=0.2, random_state=42)
+    train_indices, val_indices = train_test_split(train_indices, test_size=0.1, random_state=42)
+
+    train_df = df.loc[train_indices]
+    val_df = df.loc[val_indices]
+    test_df = df.loc[test_indices]
 
     train_df = train_df.reset_index(drop=True)
     test_df = test_df.reset_index(drop=True)
     val_df = val_df.reset_index(drop=True)
 
+    # To hf dataset
     train_dataset = Dataset.from_pandas(train_df, features=features)
     test_dataset = Dataset.from_pandas(test_df, features=features)
     val_dataset = Dataset.from_pandas(val_df, features=features)
