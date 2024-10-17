@@ -40,11 +40,21 @@ def collate_fn(batch):
     )
 
     mz = torch.tensor([item["mz"] for item in batch], dtype=torch.float).unsqueeze(1)
-    intensity = torch.tensor([item["intensity"] for item in batch], dtype=torch.float).unsqueeze(1)
-    index = torch.tensor([item["index"] for item in batch], dtype=torch.long).unsqueeze(1)
-    collision_energy = torch.tensor([item["collision_energy"] for item in batch], dtype=torch.long).unsqueeze(1)
-    instrument_type = torch.tensor([item["instrument_type"] for item in batch], dtype=torch.long).unsqueeze(1)
-    stop_token = torch.tensor([item["stop_token"] for item in batch], dtype=torch.float).unsqueeze(1)
+    intensity = torch.tensor(
+        [item["intensity"] for item in batch], dtype=torch.float
+    ).unsqueeze(1)
+    index = torch.tensor([item["index"] for item in batch], dtype=torch.long).unsqueeze(
+        1
+    )
+    collision_energy = torch.tensor(
+        [item["collision_energy"] for item in batch], dtype=torch.long
+    ).unsqueeze(1)
+    instrument_type = torch.tensor(
+        [item["instrument_type"] for item in batch], dtype=torch.long
+    ).unsqueeze(1)
+    stop_token = torch.tensor(
+        [item["stop_token"] for item in batch], dtype=torch.float
+    ).unsqueeze(1)
 
     return {
         "tokenized_smiles": tokenized_smiles,
@@ -58,16 +68,11 @@ def collate_fn(batch):
     }
 
 
-def calculate_loss(
-        mz_pred, 
-        mz, 
-        intensity_pred, 
-        intensity, 
-        stop_token_pred, 
-        stop_token
-    ):
+def calculate_loss(mz_pred, mz, intensity_pred, intensity, stop_token_pred, stop_token):
     mse_loss = nn.MSELoss()
-    bce_loss = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([10.0]).to(stop_token.device))
+    bce_loss = nn.BCEWithLogitsLoss(
+        pos_weight=torch.tensor([10.0]).to(stop_token.device)
+    )
 
     loss_mz = mse_loss(mz_pred, mz)
     loss_intensity = mse_loss(intensity_pred, intensity)
@@ -76,7 +81,7 @@ def calculate_loss(
     # Scale losses to be of the same magnitude
     scaled_loss_mz = loss_mz / torch.mean(mz**2)
     scaled_loss_intensity = loss_intensity / torch.mean(intensity**2)
-    
+
     total_loss = scaled_loss_mz + scaled_loss_intensity + loss_stop_token
 
     return total_loss, loss_mz, loss_intensity, loss_stop_token
@@ -181,7 +186,11 @@ def train(
             optimizer.zero_grad()
 
             mz_pred, intensity_pred, stop_token_pred = model(
-                tokenized_smiles, attention_mask, index, collision_energy, instrument_type
+                tokenized_smiles,
+                attention_mask,
+                index,
+                collision_energy,
+                instrument_type,
             )
 
             loss, loss_mz, loss_intensity, loss_stop_token = calculate_loss(
@@ -229,7 +238,11 @@ def train(
                 stop_token = batch["stop_token"].to(device)
 
                 mz_pred, intensity_pred, stop_token_pred = model(
-                    tokenized_smiles, attention_mask, index, collision_energy, instrument_type
+                    tokenized_smiles,
+                    attention_mask,
+                    index,
+                    collision_energy,
+                    instrument_type,
                 )
 
                 loss, _, _, _ = calculate_loss(

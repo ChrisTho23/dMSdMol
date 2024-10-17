@@ -6,9 +6,7 @@ from transformers import AutoTokenizer
 
 
 class Mol2MSDataset(Dataset):
-    def __init__(
-        self, hf_dataset: Dataset, model_name: str, max_length: int
-    ):
+    def __init__(self, hf_dataset: Dataset, model_name: str, max_length: int):
         self.dataset = hf_dataset
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.max_length = max_length

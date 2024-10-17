@@ -61,10 +61,16 @@ class Mol2MSModel(nn.Module):
         )
 
         index_embedding = self.index_embedding(index).transpose(0, 1)
-        collision_energy_embedding = self.collision_energy_embedding(collision_energy).transpose(0, 1)
-        instrument_type_embedding = self.instrument_type_embedding(instrument_type).transpose(0, 1)
+        collision_energy_embedding = self.collision_energy_embedding(
+            collision_energy
+        ).transpose(0, 1)
+        instrument_type_embedding = self.instrument_type_embedding(
+            instrument_type
+        ).transpose(0, 1)
 
-        decoder_input = index_embedding + collision_energy_embedding + instrument_type_embedding
+        decoder_input = (
+            index_embedding + collision_energy_embedding + instrument_type_embedding
+        )
 
         decoder_output = self.decoder(
             tgt=decoder_input, memory=smiles_encoding.last_hidden_state.transpose(0, 1)

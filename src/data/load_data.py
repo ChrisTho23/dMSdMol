@@ -50,6 +50,7 @@ def load_data(local_file_path: str = None):
         df = pd.read_parquet(local_file_path)
     return df
 
+
 def gen_from_dataframe(dataframe: pd.DataFrame):
     for _, row in dataframe.iterrows():
         yield {col: row[col] for col in dataframe.columns}
@@ -72,19 +73,19 @@ def df_to_dataset(df):
 
     # print number of NaN values in specified fields
     nan_counts = {
-        'mzs': df['mzs'].isna().sum(),
-        'intensities': df['intensities'].isna().sum(),
-        'collision_energy': df['collision_energy'].isna().sum(),
-        'instrument_type': df['instrument_type'].isna().sum()
+        "mzs": df["mzs"].isna().sum(),
+        "intensities": df["intensities"].isna().sum(),
+        "collision_energy": df["collision_energy"].isna().sum(),
+        "instrument_type": df["instrument_type"].isna().sum(),
     }
-    
+
     logger.info("Number of NaN values:")
     for field, count in nan_counts.items():
         logger.info(f"{field}: {count}")
 
     # Clean dataset
-    df['collision_energy'] = df['collision_energy'].str.extract('(\d+)').astype(float)
-    df = df.dropna(subset=['collision_energy', 'instrument_type'])
+    df["collision_energy"] = df["collision_energy"].str.extract("(\d+)").astype(float)
+    df = df.dropna(subset=["collision_energy", "instrument_type"])
 
     logger.info(f"Number of samples after dropping NaN values: {df.shape[0]}")
 
@@ -100,21 +101,29 @@ def df_to_dataset(df):
     df["instrument_type"] = df["instrument_type"].astype("category").cat.codes
 
     # logger.info number of distinct classes
-    logger.info(f"Number of distinct collision energy classes: {df['collision_energy'].nunique()}")
-    logger.info(f"Number of distinct instrument type classes: {df['instrument_type'].nunique()}")
+    logger.info(
+        f"Number of distinct collision energy classes: {df['collision_energy'].nunique()}"
+    )
+    logger.info(
+        f"Number of distinct instrument type classes: {df['instrument_type'].nunique()}"
+    )
 
     # Check if mzs and intensities have the same length in every row
-    length_mismatch = df[df['mzs'].apply(len) != df['intensities'].apply(len)]
+    length_mismatch = df[df["mzs"].apply(len) != df["intensities"].apply(len)]
     if not length_mismatch.empty:
-        logger.warning(f"Found {len(length_mismatch)} rows where mzs and intensities have different lengths.")
+        logger.warning(
+            f"Found {len(length_mismatch)} rows where mzs and intensities have different lengths."
+        )
         logger.warning("Removing these rows from the dataset.")
-        df = df[df['mzs'].apply(len) == df['intensities'].apply(len)]
+        df = df[df["mzs"].apply(len) == df["intensities"].apply(len)]
         logger.info(f"Number of samples after removing mismatched rows: {df.shape[0]}")
     else:
         logger.info("All rows have matching lengths for mzs and intensities.")
 
-    # Expand dataset 
-    df["mz_intensity_pair"] = df.apply(lambda row: list(zip(row["mzs"], row["intensities"])), axis=1)
+    # Expand dataset
+    df["mz_intensity_pair"] = df.apply(
+        lambda row: list(zip(row["mzs"], row["intensities"])), axis=1
+    )
     df = df.explode("mz_intensity_pair")
     df["mzs"], df["intensities"] = [list(col) for col in zip(*df["mz_intensity_pair"])]
 
@@ -124,7 +133,7 @@ def df_to_dataset(df):
 
     df["stop_token"] = np.append(np.where(df["index"] == 0, 1, 0)[1:], 1)
     df["stop_token"] = df["stop_token"].astype(np.int32)
-    
+
     logger.info(f"Number of samples after expansion: {df.shape[0]}")
 
     features = Features(
@@ -144,8 +153,12 @@ def df_to_dataset(df):
         }
     )
 
-    train_indices, test_indices = train_test_split(np.unique(df.index), test_size=0.2, random_state=42)
-    train_indices, val_indices = train_test_split(train_indices, test_size=0.1, random_state=42)
+    train_indices, test_indices = train_test_split(
+        np.unique(df.index), test_size=0.2, random_state=42
+    )
+    train_indices, val_indices = train_test_split(
+        train_indices, test_size=0.1, random_state=42
+    )
 
     train_df = df.loc[train_indices]
     val_df = df.loc[val_indices]
@@ -156,9 +169,15 @@ def df_to_dataset(df):
     val_df = val_df.reset_index(drop=True)
 
     # To hf dataset
-    train_dataset = Dataset.from_generator(lambda: gen_from_dataframe(train_df), features=features)
-    test_dataset = Dataset.from_generator(lambda: gen_from_dataframe(test_df), features=features)
-    val_dataset = Dataset.from_generator(lambda: gen_from_dataframe(val_df), features=features)
+    train_dataset = Dataset.from_generator(
+        lambda: gen_from_dataframe(train_df), features=features
+    )
+    test_dataset = Dataset.from_generator(
+        lambda: gen_from_dataframe(test_df), features=features
+    )
+    val_dataset = Dataset.from_generator(
+        lambda: gen_from_dataframe(val_df), features=features
+    )
 
     dataset_dict = DatasetDict(
         {"train": train_dataset, "test": test_dataset, "validation": val_dataset}
