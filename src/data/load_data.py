@@ -178,6 +178,7 @@ def main(local_enveda_path: str, repo_name: str):  # local_nist_path
 
     dataset = df_to_dataset(enveda_df)  # df
 
+    logger.info("Uploading dataset to Hugging Face Hub...")
     dataset_to_hub(dataset, repo_name, hf_username, hf_token)
     logger.info(f"Dataset '{repo_name}' uploaded successfully.")
 
