@@ -60,11 +60,11 @@ def collate_fn(batch):
 
 def calculate_loss(mz_pred, mz, intensity_pred, intensity, stop_token_pred, stop_token):
     mse_loss = nn.MSELoss()
-    bce_loss = nn.BCEWithLogitsLoss(weight=torch.tensor([1.0, 10.0]))
+    bce_loss = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([10.0]).to(stop_token.device))
 
     loss_mz = mse_loss(mz_pred, mz)
     loss_intensity = mse_loss(intensity_pred, intensity)
-    loss_stop_token = bce_loss(stop_token_pred, stop_token.float())
+    loss_stop_token = bce_loss(stop_token_pred, stop_token)
 
     # Scale losses to be of the same magnitude
     scaled_loss_mz = loss_mz / torch.mean(mz**2)
