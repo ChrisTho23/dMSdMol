@@ -46,27 +46,28 @@ class Mol2MSModel(nn.Module):
 
     def forward(
         self,
-        input_ids: Int[t.Tensor, "batch seq"],
+        tokenized_smiles: Int[t.Tensor, "batch seq"],
         attention_mask: Int[t.Tensor, "batch seq"],
-        index: Int[t.Tensor, "batch seq"],
-        collision_energy: Int[t.Tensor, "batch seq"],
-        instrument_type: Int[t.Tensor, "batch seq"],
+        index: Int[t.Tensor, "batch 1"],
+        collision_energy: Int[t.Tensor, "batch 1"],
+        instrument_type: Int[t.Tensor, "batch 1"],
     ) -> tuple[
         Float[t.Tensor, "batch"],
         Float[t.Tensor, "batch"],
         Float[t.Tensor, "batch"],
     ]:
-        encoder_output = self.encoder(
-            input_ids=input_ids, attention_mask=attention_mask
+        smiles_encoding = self.encoder(
+            input_ids=tokenized_smiles, attention_mask=attention_mask
         )
 
         index_embedding = self.index_embedding(index).transpose(0, 1)
         collision_energy_embedding = self.collision_energy_embedding(collision_energy).transpose(0, 1)
         instrument_type_embedding = self.instrument_type_embedding(instrument_type).transpose(0, 1)
+
         decoder_input = index_embedding + collision_energy_embedding + instrument_type_embedding
 
         decoder_output = self.decoder(
-            tgt=decoder_input, memory=encoder_output.last_hidden_state.transpose(0, 1)
+            tgt=decoder_input, memory=smiles_encoding.last_hidden_state.transpose(0, 1)
         ).transpose(0, 1)
 
         continuous_output1 = self.continuous_output1(decoder_output).squeeze(-1)
