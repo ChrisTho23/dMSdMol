@@ -36,7 +36,7 @@ def calculate_loss(
     mz: Float[t.Tensor, "batch seq-1"],
     pred_intensity: Float[t.Tensor, "batch seq-1"],
     intensity: Float[t.Tensor, "batch seq-1"],
-    sign_penalty_weight: float = 10.0,
+    sign_penalty_weight: float = 5.0,
 ):
     mse_loss = nn.MSELoss()
 
