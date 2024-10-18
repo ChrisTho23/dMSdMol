@@ -19,14 +19,14 @@ class Mol2MSLoss(nn.Module):
 
         # Soft match based on m/z proximity, weighted by true intensity
         # Find the closest match for each predicted m/z in true m/z and weight by true intensity
-        soft_match = t.exp(-mz_diff_matrix / self.config.soft_match_threshold).max(0).values # batch seq-1
+        soft_match = t.exp(-mz_diff_matrix / self.config.soft_match_threshold).max(2).values # batch seq-1
 
         # Weight the closest matches by true intensities
         weighted_soft_match = soft_match * pred_intensity # batch seq-1
 
         # Calculate intensity-weighted intersection and union
         soft_intersect = t.sum(weighted_soft_match, dim=1) # batch
-        soft_union = pred_mz.shape[1] + mz.shape[1]
+        soft_union = pred_mz.shape[2] + mz.shape[2]
 
         # Calculate soft Jaccard
         soft_jaccard = (soft_intersect + self.config.epsilon) / (soft_union + self.config.epsilon) # batch
