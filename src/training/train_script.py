@@ -2,12 +2,12 @@ import logging
 
 import fire
 import smdistributed.dataparallel.torch.torch_smddp
-import torch
+import torch as t
 import torch.distributed as dist
 import torch.nn as nn
 import wandb
 from datasets import load_dataset
-from torch.nn.utils.rnn import pad_sequence
+from jaxtyping import Float
 from torch.utils.data import DataLoader, DistributedSampler
 from tqdm import tqdm
 from transformers import get_linear_schedule_with_warmup
@@ -23,68 +23,37 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-device = torch.device(
+device = t.device(
     "cuda"
-    if torch.cuda.is_available()
-    else "mps" if torch.backends.mps.is_available() else "cpu"
+    if t.cuda.is_available()
+    else "mps" if t.backends.mps.is_available() else "cpu"
 )
 logger.info(f"Using device: {device}")
 
 
-def collate_fn(batch):
-    tokenized_smiles = pad_sequence(
-        [item["tokenized_smiles"] for item in batch], batch_first=True, padding_value=0
-    )
-    attention_mask = pad_sequence(
-        [item["attention_mask"] for item in batch], batch_first=True, padding_value=0
-    )
-
-    mz = torch.tensor([item["mz"] for item in batch], dtype=torch.float).unsqueeze(1)
-    intensity = torch.tensor(
-        [item["intensity"] for item in batch], dtype=torch.float
-    ).unsqueeze(1)
-    index = torch.tensor([item["index"] for item in batch], dtype=torch.long).unsqueeze(
-        1
-    )
-    collision_energy = torch.tensor(
-        [item["collision_energy"] for item in batch], dtype=torch.long
-    ).unsqueeze(1)
-    instrument_type = torch.tensor(
-        [item["instrument_type"] for item in batch], dtype=torch.long
-    ).unsqueeze(1)
-    stop_token = torch.tensor(
-        [item["stop_token"] for item in batch], dtype=torch.float
-    ).unsqueeze(1)
-
-    return {
-        "tokenized_smiles": tokenized_smiles,
-        "attention_mask": attention_mask,
-        "index": index,
-        "collision_energy": collision_energy,
-        "instrument_type": instrument_type,
-        "mz": mz,
-        "intensity": intensity,
-        "stop_token": stop_token,
-    }
-
-
-def calculate_loss(mz_pred, mz, intensity_pred, intensity, stop_token_pred, stop_token):
+def calculate_loss(
+    pred_mz: Float[t.Tensor, "batch seq-1"],
+    mz: Float[t.Tensor, "batch seq-1"],
+    pred_intensity: Float[t.Tensor, "batch seq-1"],
+    intensity: Float[t.Tensor, "batch seq-1"],
+    sign_penalty_weight: float = 5.0,
+):
     mse_loss = nn.MSELoss()
-    bce_loss = nn.BCEWithLogitsLoss(
-        pos_weight=torch.tensor([10.0]).to(stop_token.device)
-    )
 
-    loss_mz = mse_loss(mz_pred, mz)
-    loss_intensity = mse_loss(intensity_pred, intensity)
-    loss_stop_token = bce_loss(stop_token_pred, stop_token)
+    loss_mz = mse_loss(pred_mz, mz)
+    loss_intensity = mse_loss(pred_intensity, intensity)
+
+    sign_penalty_mz = t.mean(t.abs(t.sign(pred_mz) - t.sign(mz)))
+    sign_penalty_intensity = t.mean(t.abs(t.sign(pred_intensity) - t.sign(intensity)))
+    sign_penalty = sign_penalty_weight * (sign_penalty_mz + sign_penalty_intensity)
 
     # Scale losses to be of the same magnitude
-    scaled_loss_mz = loss_mz / torch.mean(mz**2)
-    scaled_loss_intensity = loss_intensity / torch.mean(intensity**2)
+    scaled_loss_mz = loss_mz / t.mean(mz**2)
+    scaled_loss_intensity = loss_intensity / t.mean(intensity**2)
 
-    total_loss = scaled_loss_mz + scaled_loss_intensity + loss_stop_token
+    total_loss = scaled_loss_mz + scaled_loss_intensity + sign_penalty
 
-    return total_loss, loss_mz, loss_intensity, loss_stop_token
+    return total_loss, loss_mz, loss_intensity, sign_penalty
 
 
 def train(
@@ -121,12 +90,14 @@ def train(
     train_dataset = Mol2MSDataset(
         hf_dataset["train"],
         model_config.encoder_name,
-        model_config.max_length,
+        model_config.max_encoder_length,
+        model_config.max_decoder_length,
     )
     val_dataset = Mol2MSDataset(
         hf_dataset["test"],
         model_config.encoder_name,
-        model_config.max_length,
+        model_config.max_encoder_length,
+        model_config.max_decoder_length,
     )
 
     logger.info("Creating data loaders")
@@ -135,25 +106,21 @@ def train(
         batch_size=training_config.batch_size,
         shuffle=False,
         sampler=train_sampler,
-        collate_fn=collate_fn,
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size=training_config.batch_size,
         shuffle=False,
         sampler=val_sampler,
-        collate_fn=collate_fn,
     )
 
     logger.info("Initializing model")
-    model = Mol2MSModel(model_config).to(device)
-    model = torch.nn.parallel.DistributedDataParallel(
-        model, device_ids=[dist.get_rank()]
-    )
+    model = Mol2MSModel(model_config, train_dataset.get_tokenizer()).to(device)
+    model = t.nn.parallel.DistributedDataParallel(model, device_ids=[dist.get_rank()])
     if dist.get_rank() == 0:
         wandb.watch(model)
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=training_config.learning_rate)
+    optimizer = t.optim.AdamW(model.parameters(), lr=training_config.learning_rate)
     total_steps = len(train_loader) * training_config.num_epochs
     scheduler = get_linear_schedule_with_warmup(
         optimizer,
@@ -173,28 +140,29 @@ def train(
             if dist.get_rank() == 0
             else train_loader
         )
-        for batch_idx, batch in enumerate(progress_bar):
-            tokenized_smiles = batch["tokenized_smiles"].to(device)
+        for _, batch in enumerate(progress_bar):
+            smiles_ids = batch["smiles_ids"].to(device)
             attention_mask = batch["attention_mask"].to(device)
-            index = batch["index"].to(device)
             collision_energy = batch["collision_energy"].to(device)
             instrument_type = batch["instrument_type"].to(device)
-            mz = batch["mz"].to(device)
+            tgt_intensity = batch["tgt_intensity"].to(device)
+            tgt_mz = batch["tgt_mz"].to(device)
             intensity = batch["intensity"].to(device)
-            stop_token = batch["stop_token"].to(device)
+            mz = batch["mz"].to(device)
 
             optimizer.zero_grad()
 
-            mz_pred, intensity_pred, stop_token_pred = model(
-                tokenized_smiles,
+            pred_mz, pred_intensity = model(
+                smiles_ids,
                 attention_mask,
-                index,
                 collision_energy,
                 instrument_type,
+                tgt_intensity,
+                tgt_mz,
             )
 
-            loss, loss_mz, loss_intensity, loss_stop_token = calculate_loss(
-                mz_pred, mz, intensity_pred, intensity, stop_token_pred, stop_token
+            loss, loss_mz, loss_intensity, sign_penalty = calculate_loss(
+                pred_mz, mz, pred_intensity, intensity
             )
             total_loss += loss.item()
 
@@ -207,7 +175,7 @@ def train(
                     {
                         "mz_loss": loss_mz.item(),
                         "intensity_loss": loss_intensity.item(),
-                        "stop_token_loss": loss_stop_token.item(),
+                        "sign_penalty": sign_penalty.item(),
                         "train_loss": loss.item(),
                     }
                 )
@@ -222,32 +190,31 @@ def train(
         model.eval()
         val_loss = 0
 
-        with torch.no_grad():
+        with t.no_grad():
             for batch in (
                 tqdm(val_loader, desc="Validation")
                 if dist.get_rank() == 0
                 else val_loader
             ):
-                tokenized_smiles = batch["tokenized_smiles"].to(device)
+                smiles_ids = batch["smiles_ids"].to(device)
                 attention_mask = batch["attention_mask"].to(device)
-                index = batch["index"].to(device)
                 collision_energy = batch["collision_energy"].to(device)
                 instrument_type = batch["instrument_type"].to(device)
-                mz = batch["mz"].to(device)
+                tgt_intensity = batch["tgt_intensity"].to(device)
+                tgt_mz = batch["tgt_mz"].to(device)
                 intensity = batch["intensity"].to(device)
-                stop_token = batch["stop_token"].to(device)
+                mz = batch["mz"].to(device)
 
-                mz_pred, intensity_pred, stop_token_pred = model(
-                    tokenized_smiles,
+                pred_mz, pred_intensity = model(
+                    smiles_ids,
                     attention_mask,
-                    index,
                     collision_energy,
                     instrument_type,
+                    tgt_intensity,
+                    tgt_mz,
                 )
 
-                loss, _, _, _ = calculate_loss(
-                    mz_pred, mz, intensity_pred, intensity, stop_token_pred, stop_token
-                )
+                loss, _, _, _ = calculate_loss(pred_mz, mz, pred_intensity, intensity)
                 val_loss += loss.item()
 
         avg_val_loss = val_loss / len(val_loader)
