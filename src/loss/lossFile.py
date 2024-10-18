@@ -51,10 +51,39 @@ class interContrastiveLoss(nn.Module):
 
 
 
-class WganLoss(nn.Module):
-    pass
+def wgan_loss(D, real, fake, device, lambda_gp=10):
+    real_validity = D(real)
+    fake_validity = D(fake)
 
+    w_loss = torch.mean(fake_validity) - torch.mean(real_validity)
 
+    # Gradient penalty
+    alpha = torch.rand((real.size(0), 1, 1), device=device)
+    interpolated = (alpha * real + (1 - alpha) * fake).requires_grad_(True)
+    interpolated_validity = D(interpolated)
+
+    grad_outputs = torch.ones(interpolated_validity.size(), device=device)
+    gradients = torch.autograd.grad(
+        outputs=interpolated_validity, inputs=interpolated,
+        grad_outputs=grad_outputs, create_graph=True, retain_graph=True, only_inputs=True
+    )[0]
+    gradients = gradients.view(gradients.size(0), -1)
+    gradient_penalty = lambda_gp * ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+
+    return w_loss + gradient_penalty
+def ragan_loss(D_real, D_fake):
+    """Relativistic Average GAN Loss."""
+    # Discriminator loss
+    D_loss_real = torch.mean(torch.nn.functional.softplus(-(D_real - torch.mean(D_fake))))
+    D_loss_fake = torch.mean(torch.nn.functional.softplus(D_fake - torch.mean(D_real)))
+    D_loss = (D_loss_real + D_loss_fake) / 2
+
+    # Generator loss (relativistic)
+    G_loss_real = torch.mean(torch.nn.functional.softplus(D_real - torch.mean(D_fake)))
+    G_loss_fake = torch.mean(torch.nn.functional.softplus(-(D_fake - torch.mean(D_real))))
+    G_loss = (G_loss_real + G_loss_fake) / 2
+
+    return D_loss, G_loss
 
 
 
