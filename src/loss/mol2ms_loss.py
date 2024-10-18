@@ -33,8 +33,9 @@ class Mol2MSLoss(nn.Module):
         jaccard_dist = 1 - soft_jaccard # batch
 
         # length penalty
-        pred_length = t.sum(t.where(pred_mz >= 0.0, 1, 0), dim=1)
-        length_penalty = t.abs(pred_length - mz.shape[1]) * self.config.length_penalty_weight
+        pred_length = t.sum(t.where(pred_mz >= 0.0, 1, 0), dim=1).squeeze(-1) # batch
+        true_length = t.sum(t.where(mz >= 0.0, 1, 0), dim=2).squeeze(-1) # batch
+        length_penalty = t.abs(pred_length - true_length) * self.config.length_penalty_weight
 
         total_loss = jaccard_dist + length_penalty # batch
 
