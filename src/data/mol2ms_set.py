@@ -28,6 +28,8 @@ class Mol2MSDataset(Dataset):
             special_tokens["bos_token"] = "<s>"
         if self.tokenizer.eos_token is None:
             special_tokens["eos_token"] = "</s>"
+        if self.tokenizer.pad_token is None:
+            special_tokens["pad_token"] = "<pad>"
         if self.tokenizer.cls_token is None:
             special_tokens["cls_token"] = "<cls>"
         if special_tokens:
