@@ -26,7 +26,7 @@ class Mol2MSLoss(nn.Module):
 
         # Calculate intensity-weighted intersection and union
         soft_intersect = t.sum(weighted_soft_match, dim=1) # batch
-        soft_union = pred_mz.shape[2] + mz.shape[2]
+        soft_union = pred_mz.shape[1] + mz.shape[2]
 
         # Calculate soft Jaccard
         soft_jaccard = (soft_intersect + self.config.epsilon) / (soft_union + self.config.epsilon) # batch
