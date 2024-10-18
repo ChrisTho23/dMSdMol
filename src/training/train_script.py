@@ -5,13 +5,13 @@ import smdistributed.dataparallel.torch.torch_smddp
 import torch as t
 import torch.distributed as dist
 import torch.nn as nn
+import wandb
 from datasets import load_dataset
 from jaxtyping import Float
 from torch.utils.data import DataLoader, DistributedSampler
 from tqdm import tqdm
 from transformers import get_linear_schedule_with_warmup
 
-import wandb
 from src.data import Mol2MSDataset
 from src.model import Mol2MSModel, Mol2MSModelConfig
 from src.training.config import Mol2MSTrainingConfig
