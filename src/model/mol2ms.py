@@ -106,20 +106,21 @@ class Mol2MSModel(nn.Module):
 
         # Decoder embeddings
         decoder_embeddings = self._get_decoder_embeddings(
-            target_intensities=tgt_intensities, 
+            target_intensities=tgt_intensities.unsqueeze(-1), 
             target_mzs=tgt_mzs
         ) # batch seq d_model
 
         decoder_cls_token = self.decoder_cls_token.expand(batch, 1, self.d_model) # batch 1 d_model
         tgt = t.cat([decoder_cls_token, decoder_embeddings], dim=1).transpose(0, 1) # seq batch d_model
         tgt_mask = t.triu(
-            t.full((seq, seq), float("-inf")), diagonal=1
+            t.full((self.config.max_decoder_length, self.config.max_decoder_length), float("-inf")), 
+            diagonal=1
         ).to(tgt.device) # seq seq
 
         # Forward pass
         smiles_encoding = self.encoder(
             inputs_embeds=encoder_input_embeddings, 
-            attention_mask=attention_mask
+            attention_mask=attention_mask.transpose(0, 1)
         ) # seq batch d_model
         memory = smiles_encoding.last_hidden_state # seq batch d_model
 
