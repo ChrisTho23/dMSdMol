@@ -12,7 +12,7 @@ load_dotenv()
 @dataclass
 class Mol2MSTrainingConfig:
     dataset_name: str = field(
-        default="ChrisTho/mol2ms_enveda_machine",  # ChrisTho/dMSdMol_dummy_data
+        default="ChrisTho/mol2ms_enveda_machine_v2",  # ChrisTho/dMSdMol_dummy_data
         metadata={"help": "Name of the dataset to use for training"},
     )
     batch_size: int = field(default=64, metadata={"help": "Batch size for training"})
@@ -66,7 +66,7 @@ class SageMakerTrainingConfig:
     git_config: Dict[str, str] = field(
         default_factory=lambda: {
             "repo": "https://github.com/ChrisTho23/dMSdMol",
-            "branch": "main",
+            "branch": "fix-decoder-input",
         },
         metadata={"help": "Git configuration for source code"},
     )
