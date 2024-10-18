@@ -5,95 +5,134 @@ import torch.nn as nn
 from jaxtyping import Float, Int
 from transformers import AutoModel, AutoTokenizer
 
+from src.embeddings.mz_pos_embedding import MZPositionalEncoding
+
 from .config import Mol2MSModelConfig
 
 
 class Mol2MSModel(nn.Module):
-    def __init__(self, config: Mol2MSModelConfig):
+    def __init__(self, config: Mol2MSModelConfig, tokenizer: AutoTokenizer):
         super().__init__()
         self.config = config
-        self.tokenizer = AutoTokenizer.from_pretrained(self.config.encoder_name)
+
+        # Encoder from BartSmiles
         self.encoder = AutoModel.from_pretrained(self.config.encoder_name).encoder
+        self.encoder.resize_token_embeddings(len(tokenizer))
+
+        self.d_model = self.encoder.config.hidden_size
 
         # Custom decoder
+        decoder_layer = nn.TransformerDecoderLayer(
+            d_model=self.d_model,
+            nhead=self.config.num_heads,
+            dim_feedforward=self.d_model * 4,
+            dropout=self.config.dropout,
+            activation='gelu',
+        )
         self.decoder = nn.TransformerDecoder(
-            nn.TransformerDecoderLayer(
-                d_model=self.encoder.config.hidden_size, nhead=self.config.num_heads
-            ),
+            decoder_layer,
             num_layers=self.config.num_layers,
+            norm=nn.LayerNorm(self.d_model)
+        )
+
+        # Encoder embeddings
+        self.encoder_embeddings = self.encoder.get_input_embeddings()
+        self.collision_energy_embedding = nn.Embedding(
+            self.config.collision_energy_dim, self.d_model
+        )
+        self.instrument_type_embedding = nn.Embedding(
+            self.config.instrument_type_dim, self.d_model
+        )
+
+        # Decoder embeddings
+        self.decoder_cls_token = nn.Parameter(
+            t.randn(1, 1, self.d_model)
+        )
+        self.intensity_embedding = nn.Linear(1, self.d_model)
+        self.mz_positional_embedding = MZPositionalEncoding(
+            d_model=self.d_model, 
+            freq_scale=1.0, 
+            normalize=False
         )
 
         # Output layers
-        self.continuous_output1 = nn.Linear(self.encoder.config.hidden_size, 1)
-        self.continuous_output2 = nn.Linear(self.encoder.config.hidden_size, 1)
-        self.binary_output = nn.Linear(self.encoder.config.hidden_size, 1)
+        self.mz_output = nn.Linear(self.d_model, 1)
+        self.intensity_output = nn.Linear(self.d_model, 1)
+    
+    def _get_encoder_embeddings(
+        self, 
+        smile_ids: Int[t.Tensor, "batch seq"], 
+        collision_energy: Int[t.Tensor, "batch"], 
+        instrument_type: Int[t.Tensor, "batch"]
+    ) -> Float[t.Tensor, "batch seq d_model"]:
+        """Get the encoder embeddings for the SMILES."""
+        smiles_embedding = self.encoder_embeddings(smile_ids) # batch seq d_model
+        collision_energy_embedding = self.collision_energy_embedding(collision_energy).expand_as(smiles_embedding) # batch seq d_model
+        instrument_type_embedding = self.instrument_type_embedding(instrument_type).expand_as(smiles_embedding) # batch seq d_model
 
-        # Embeddings
-        self.index_embedding = nn.Embedding(
-            self.config.max_ms_length, self.encoder.config.hidden_size
-        )
-        self.collision_energy_embedding = nn.Embedding(
-            self.config.collision_energy_dim, self.encoder.config.hidden_size
-        )
-        self.instrument_type_embedding = nn.Embedding(
-            self.config.instrument_type_dim, self.encoder.config.hidden_size
-        )
+        return smiles_embedding + collision_energy_embedding + instrument_type_embedding
+    
+    def _get_decoder_embeddings(
+        self, 
+        target_intensities: Float[t.Tensor, "batch seq-1"], 
+        target_mzs: Float[t.Tensor, "batch seq-1"]
+    ) -> Float[t.Tensor, "batch seq-1 d_model"]:
+        """Get the decoder embeddings for the target intensities and mzs."""
+        intensity_embedding = self.intensity_embedding(target_intensities) # batch seq-1 d_model
+        mz_embedding = self.mz_positional_embedding(target_mzs) # batch seq-1 d_model
 
-        if self.tokenizer.bos_token is None:
-            self.tokenizer.bos_token = "<s>"
-        if self.tokenizer.eos_token is None:
-            self.tokenizer.eos_token = "</s>"
+        return intensity_embedding + mz_embedding
 
     def forward(
         self,
-        tokenized_smiles: Int[t.Tensor, "batch seq"],
+        smiles_ids: Int[t.Tensor, "batch seq"],
         attention_mask: Int[t.Tensor, "batch seq"],
-        index: Int[t.Tensor, "batch 1"],
-        collision_energy: Int[t.Tensor, "batch 1"],
-        instrument_type: Int[t.Tensor, "batch 1"],
+        collision_energy: Int[t.Tensor, "batch"],
+        instrument_type: Int[t.Tensor, "batch"],
+        tgt_intensities: Float[t.Tensor, "batch seq-1"],
+        tgt_mzs: Float[t.Tensor, "batch ms_seq-1"]
     ) -> tuple[
-        Float[t.Tensor, "batch"],
-        Float[t.Tensor, "batch"],
-        Float[t.Tensor, "batch"],
+        Float[t.Tensor, "batch seq-1"],
+        Float[t.Tensor, "batch seq-1"]
     ]:
+        batch, seq = smiles_ids.shape
+
+        # Encoder embeddings
+        encoder_input_embeddings = self._get_encoder_embeddings(
+            smile_ids=smiles_ids, 
+            collision_energy=collision_energy, 
+            instrument_type=instrument_type
+        ).transpose(0, 1) # seq batch d_model
+
+        # Decoder embeddings
+        decoder_embeddings = self._get_decoder_embeddings(
+            target_intensities=tgt_intensities, 
+            target_mzs=tgt_mzs
+        ) # batch seq d_model
+
+        decoder_cls_token = self.decoder_cls_token.expand(batch, 1, self.d_model) # batch 1 d_model
+        tgt = t.cat([decoder_cls_token, decoder_embeddings], dim=1).transpose(0, 1) # seq batch d_model
+        tgt_mask = t.triu(
+            t.full((seq, seq), float("-inf")), diagonal=1
+        ).to(tgt.device) # seq seq
+
+        # Forward pass
         smiles_encoding = self.encoder(
-            input_ids=tokenized_smiles, attention_mask=attention_mask
-        )
-
-        index_embedding = self.index_embedding(index).transpose(0, 1)
-        collision_energy_embedding = self.collision_energy_embedding(
-            collision_energy
-        ).transpose(0, 1)
-        instrument_type_embedding = self.instrument_type_embedding(
-            instrument_type
-        ).transpose(0, 1)
-
-        decoder_input = (
-            index_embedding + collision_energy_embedding + instrument_type_embedding
-        )
+            inputs_embeds=encoder_input_embeddings, 
+            attention_mask=attention_mask
+        ) # seq batch d_model
+        memory = smiles_encoding.last_hidden_state # seq batch d_model
 
         decoder_output = self.decoder(
-            tgt=decoder_input, memory=smiles_encoding.last_hidden_state.transpose(0, 1)
-        ).transpose(0, 1)
+            tgt=tgt, memory=memory, tgt_mask=tgt_mask
+        ).transpose(0, 1) # batch seq d_model
 
-        continuous_output1 = self.continuous_output1(decoder_output).squeeze(-1)
-        continuous_output2 = self.continuous_output2(decoder_output).squeeze(-1)
-        binary_output = self.binary_output(decoder_output).squeeze(-1)
+        mz_output = self.mz_output(decoder_output[:, 1:, :]).squeeze(-1) # batch seq-1
+        intensity_output = self.intensity_output(decoder_output[:, 1:, :]).squeeze(-1) # batch seq-1
 
-        return continuous_output1, continuous_output2, binary_output
-
-    def tokenize(self, smiles_string: str):
-        """Tokenizes a SMILES string using the BART tokenizer."""
-        return self.tokenizer(
-            smiles_string,
-            return_tensors="pt",
-            padding="max_length",
-            truncation=True,
-            max_length=self.config.max_length,
-        )
+        return mz_output, intensity_output
 
     def save(self, path: str):
-        """Saves the model and tokenizer to the specified path."""
+        """Saves the model to the specified path."""
         t.save(self.state_dict(), f"{path}/model.pt")
-        self.tokenizer.save_pretrained(path)
-        print(f"Model and tokenizer saved to {path}")
+        print(f"Model saved to {path}")
