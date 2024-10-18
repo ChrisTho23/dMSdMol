@@ -47,7 +47,6 @@ def calculate_loss(
     sign_penalty_intensity = t.mean(t.abs(t.sign(pred_intensity) - t.sign(intensity)))
     sign_penalty = sign_penalty_weight * (sign_penalty_mz + sign_penalty_intensity)
 
-
     # Scale losses to be of the same magnitude
     scaled_loss_mz = loss_mz / t.mean(mz**2)
     scaled_loss_intensity = loss_intensity / t.mean(intensity**2)
@@ -106,20 +105,18 @@ def train(
         train_dataset,
         batch_size=training_config.batch_size,
         shuffle=False,
-        sampler=train_sampler
+        sampler=train_sampler,
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size=training_config.batch_size,
         shuffle=False,
-        sampler=val_sampler
+        sampler=val_sampler,
     )
 
     logger.info("Initializing model")
     model = Mol2MSModel(model_config, train_dataset.get_tokenizer()).to(device)
-    model = t.nn.parallel.DistributedDataParallel(
-        model, device_ids=[dist.get_rank()]
-    )
+    model = t.nn.parallel.DistributedDataParallel(model, device_ids=[dist.get_rank()])
     if dist.get_rank() == 0:
         wandb.watch(model)
 
@@ -161,7 +158,7 @@ def train(
                 collision_energy,
                 instrument_type,
                 tgt_intensity,
-                tgt_mz
+                tgt_mz,
             )
 
             loss, loss_mz, loss_intensity, sign_penalty = calculate_loss(
@@ -214,12 +211,10 @@ def train(
                     collision_energy,
                     instrument_type,
                     tgt_intensity,
-                    tgt_mz
+                    tgt_mz,
                 )
 
-                loss, _, _, _ = calculate_loss(
-                    pred_mz, mz, pred_intensity, intensity
-                )
+                loss, _, _, _ = calculate_loss(pred_mz, mz, pred_intensity, intensity)
                 val_loss += loss.item()
 
         avg_val_loss = val_loss / len(val_loader)

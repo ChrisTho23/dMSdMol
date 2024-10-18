@@ -7,7 +7,13 @@ from transformers import AutoTokenizer
 
 
 class Mol2MSDataset(Dataset):
-    def __init__(self, hf_dataset: Dataset, model_name: str, max_encoder_length: int, max_decoder_length: int):
+    def __init__(
+        self,
+        hf_dataset: Dataset,
+        model_name: str,
+        max_encoder_length: int,
+        max_decoder_length: int,
+    ):
         self.dataset = hf_dataset
         self.max_encoder_length = max_encoder_length
         self.max_decoder_length = max_decoder_length
@@ -49,26 +55,37 @@ class Mol2MSDataset(Dataset):
         cls_token_id = self.tokenizer.cls_token_id
         tokens["input_ids"] = t.cat(
             [t.full((1, 1), cls_token_id), tokens["input_ids"]], dim=1
-        ) # 1 seq
+        )  # 1 seq
         tokens["attention_mask"] = t.cat(
             [t.ones((1, 1), dtype=t.long), tokens["attention_mask"]], dim=1
-        ) # 1 seq
+        )  # 1 seq
         return tokens
-    
-    def _pad_ms(self, mz: List[float], intensity: List[float]) -> Tuple[Float[t.Tensor, "seq-1"], Float[t.Tensor, "seq-1"]]:
+
+    def _pad_ms(
+        self, mz: List[float], intensity: List[float]
+    ) -> Tuple[Float[t.Tensor, "seq-1"], Float[t.Tensor, "seq-1"]]:
         mz = t.tensor(mz)
         intensity = t.tensor(intensity)
-        
+
         pad_length = self.max_decoder_length - 1 - len(mz)
         if pad_length > 0:
-            mz = t.nn.functional.pad(mz, (0, pad_length), mode='constant', value=self.mz_pad_value)
-            intensity = t.nn.functional.pad(intensity, (0, pad_length), mode='constant', value=self.intensity_pad_value)
+            mz = t.nn.functional.pad(
+                mz, (0, pad_length), mode="constant", value=self.mz_pad_value
+            )
+            intensity = t.nn.functional.pad(
+                intensity,
+                (0, pad_length),
+                mode="constant",
+                value=self.intensity_pad_value,
+            )
         else:
-            mz = mz[:self.max_decoder_length - 1]
-            intensity = intensity[:self.max_decoder_length - 1]
+            mz = mz[: self.max_decoder_length - 1]
+            intensity = intensity[: self.max_decoder_length - 1]
         return mz, intensity
-    
-    def _shift_right(self, tensor: Float[t.Tensor, "seq"], start_token: float) -> Float[t.Tensor, "seq"]:
+
+    def _shift_right(
+        self, tensor: Float[t.Tensor, "seq"], start_token: float
+    ) -> Float[t.Tensor, "seq"]:
         """Shift the tensor to the right and insert the start token."""
         start_token = t.tensor([start_token], device=tensor.device)
         shifted_tensor = t.cat([start_token, tensor[:-1]], dim=0)
@@ -80,7 +97,7 @@ class Mol2MSDataset(Dataset):
     def __getitem__(self, idx) -> Dict[str, t.Tensor]:
         item = self.dataset[idx]
 
-        smiles = self._tokenize(item["smiles"]) 
+        smiles = self._tokenize(item["smiles"])
 
         mz, intensity = self._pad_ms(item["mzs"], item["intensities"])
 
@@ -88,15 +105,15 @@ class Mol2MSDataset(Dataset):
         tgt_mz = self._shift_right(mz, self.mz_start_token)
 
         return {
-            "smiles_ids": smiles.input_ids.squeeze(), # 1 seq
-            "attention_mask": smiles.attention_mask.squeeze(), # 1 seq
-            "collision_energy": t.tensor([item["collision_energy"]]), # 1
-            "instrument_type": t.tensor([item["instrument_type"]]), # 1
-            "tgt_intensity": tgt_intensity, # seq-1
-            "tgt_mz": tgt_mz, # seq-1
-            "intensity": intensity, # seq-1
-            "mz": mz, # seq-1
+            "smiles_ids": smiles.input_ids.squeeze(),  # 1 seq
+            "attention_mask": smiles.attention_mask.squeeze(),  # 1 seq
+            "collision_energy": t.tensor([item["collision_energy"]]),  # 1
+            "instrument_type": t.tensor([item["instrument_type"]]),  # 1
+            "tgt_intensity": tgt_intensity,  # seq-1
+            "tgt_mz": tgt_mz,  # seq-1
+            "intensity": intensity,  # seq-1
+            "mz": mz,  # seq-1
         }
-    
+
     def get_tokenizer(self) -> AutoTokenizer:
         return self.tokenizer
