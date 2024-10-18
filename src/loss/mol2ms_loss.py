@@ -8,7 +8,7 @@ class SoftJaccardLossWithTrueIntensity(nn.Module):
         self.length_penalty_weight = length_penalty_weight  # Weight for the length penalty
         self.smooth = smooth  # Smoothing term to avoid division by zero
 
-    def forward(self, y_pred, y_true):
+    def forward(self, y_pred, y_true,is_final=True):
         """
         y_pred and y_true are lists of tensors of shape [(sequence_length_pred, 2), ...]
         where each tensor row represents [m/z, intensity].
@@ -45,8 +45,10 @@ class SoftJaccardLossWithTrueIntensity(nn.Module):
             jaccard_loss = 1 - soft_jaccard  # Loss is 1 - Jaccard index for this sequence pair
 
             # Length penalty for mismatched sequence lengths
-            length_penalty = abs(len(y_pred[i]) - len(y_true[i])) * self.length_penalty_weight
-
+            if is_final== True:
+                length_penalty = abs(len(y_pred[i]) - len(y_true[i])) * self.length_penalty_weight
+            else:
+                length_penalty = 0
             # Combined loss for this sequence pair
             total_loss = jaccard_loss + length_penalty
             losses.append(total_loss)
