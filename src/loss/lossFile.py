@@ -37,8 +37,7 @@ class contrastiveLoss(nn.Module):
         # Mean loss over the batch
         return loss
     def adjust_tempWithFunction(func):
-        
-
+        pass
 
 
 class interContrastiveLoss(nn.Module):
@@ -47,8 +46,8 @@ class interContrastiveLoss(nn.Module):
     Args:
         nn (_type_): _description_
     """
-
     pass
+
 
 
 
@@ -56,6 +55,6 @@ class WganLoss(nn.Module):
     pass
 
 
-class 
+
 
 
