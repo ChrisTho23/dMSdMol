@@ -4,15 +4,14 @@ import fire
 import smdistributed.dataparallel.torch.torch_smddp
 import torch as t
 import torch.distributed as dist
-import torch.nn as nn
 import wandb
 from datasets import load_dataset
-from jaxtyping import Float
 from torch.utils.data import DataLoader, DistributedSampler
 from tqdm import tqdm
 from transformers import get_linear_schedule_with_warmup
 
 from src.data import Mol2MSDataset
+from src.loss import Mol2MSLoss
 from src.model import Mol2MSModel, Mol2MSModelConfig
 from .config import Mol2MSTrainingConfig
 
@@ -29,31 +28,6 @@ device = t.device(
     else "mps" if t.backends.mps.is_available() else "cpu"
 )
 logger.info(f"Using device: {device}")
-
-
-def calculate_loss(
-    pred_mz: Float[t.Tensor, "batch seq-1"],
-    mz: Float[t.Tensor, "batch seq-1"],
-    pred_intensity: Float[t.Tensor, "batch seq-1"],
-    intensity: Float[t.Tensor, "batch seq-1"],
-    sign_penalty_weight: float = 5.0,
-):
-    mse_loss = nn.MSELoss()
-
-    loss_mz = mse_loss(pred_mz, mz)
-    loss_intensity = mse_loss(pred_intensity, intensity)
-
-    sign_penalty_mz = t.mean(t.abs(t.sign(pred_mz) - t.sign(mz)))
-    sign_penalty_intensity = t.mean(t.abs(t.sign(pred_intensity) - t.sign(intensity)))
-    sign_penalty = sign_penalty_weight * (sign_penalty_mz + sign_penalty_intensity)
-
-    # Scale losses to be of the same magnitude
-    scaled_loss_mz = loss_mz / t.mean(mz**2)
-    scaled_loss_intensity = loss_intensity / t.mean(intensity**2)
-
-    total_loss = scaled_loss_mz + scaled_loss_intensity + sign_penalty
-
-    return total_loss, loss_mz, loss_intensity, sign_penalty
 
 
 def train(
@@ -127,6 +101,7 @@ def train(
         num_warmup_steps=training_config.warmup_steps,
         num_training_steps=total_steps,
     )
+    loss_fn = Mol2MSLoss()
 
     logger.info("Starting training")
     for epoch in range(training_config.num_epochs):
@@ -161,9 +136,13 @@ def train(
                 tgt_mz,
             )
 
-            loss, loss_mz, loss_intensity, sign_penalty = calculate_loss(
-                pred_mz, mz, pred_intensity, intensity
+            soft_jaccard_loss, loss_mz, loss_intensity, sign_penalty = loss_fn(
+                pred_mz=pred_mz,
+                mz=mz,
+                intensity=intensity,
+                pred_intensity=pred_intensity,
             )
+            loss = soft_jaccard_loss + loss_mz + loss_intensity + sign_penalty
             total_loss += loss.item()
 
             loss.backward()
@@ -173,13 +152,14 @@ def train(
             if dist.get_rank() == 0:
                 wandb.log(
                     {
-                        "mz_loss": loss_mz.item(),
-                        "intensity_loss": loss_intensity.item(),
+                        "total_train_loss": loss.item(),
+                        "soft_jaccard_loss": soft_jaccard_loss.item(),
+                        "loss_mz": loss_mz.item(),
+                        "loss_intensity": loss_intensity.item(),
                         "sign_penalty": sign_penalty.item(),
-                        "train_loss": loss.item(),
                     }
                 )
-                progress_bar.set_postfix({"loss": f"{loss.item():.4f}"})
+                progress_bar.set_postfix({"total_train_loss": f"{loss.item():.4f}"})
 
         avg_loss = total_loss / len(train_loader)
         logger.info(
@@ -214,7 +194,13 @@ def train(
                     tgt_mz,
                 )
 
-                loss, _, _, _ = calculate_loss(pred_mz, mz, pred_intensity, intensity)
+                soft_jaccard_loss, loss_mz, loss_intensity, sign_penalty = loss_fn(
+                    pred_mz=pred_mz,
+                    mz=mz,
+                    intensity=intensity,
+                    pred_intensity=pred_intensity,
+                )
+                loss = soft_jaccard_loss + loss_mz + loss_intensity + sign_penalty
                 val_loss += loss.item()
 
         avg_val_loss = val_loss / len(val_loader)
