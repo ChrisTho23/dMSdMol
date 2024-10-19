@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+
 @dataclass
 class Mol2MSLossConfig:
     mse_mz_weight: float = 1.0
@@ -9,5 +10,3 @@ class Mol2MSLossConfig:
 
     soft_match_threshold: float = 0.01
     epsilon: float = 1e-6
-
-    

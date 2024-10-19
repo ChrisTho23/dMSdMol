@@ -11,9 +11,9 @@ from tqdm import tqdm
 from transformers import get_linear_schedule_with_warmup
 
 from src.data import Mol2MSDataset
+from src.loss import Mol2MSLoss
 from src.model import Mol2MSModel, Mol2MSModelConfig
 from src.training.config import Mol2MSTrainingConfig
-from src.loss import Mol2MSLoss
 
 dist.init_process_group(backend="smddp")
 
@@ -150,13 +150,15 @@ def train(
             scheduler.step()
 
             if dist.get_rank() == 0:
-                wandb.log({
-                    "total_train_loss": loss.item(),
-                    "soft_jaccard_loss": soft_jaccard_loss.item(),
-                    "loss_mz": loss_mz.item(),
-                    "loss_intensity": loss_intensity.item(),
-                    "sign_penalty": sign_penalty.item(),
-                })
+                wandb.log(
+                    {
+                        "total_train_loss": loss.item(),
+                        "soft_jaccard_loss": soft_jaccard_loss.item(),
+                        "loss_mz": loss_mz.item(),
+                        "loss_intensity": loss_intensity.item(),
+                        "sign_penalty": sign_penalty.item(),
+                    }
+                )
                 progress_bar.set_postfix({"total_train_loss": f"{loss.item():.4f}"})
 
         avg_loss = total_loss / len(train_loader)
