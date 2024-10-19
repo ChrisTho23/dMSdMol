@@ -90,34 +90,32 @@ class Mol2MSModel(nn.Module):
         mz_embedding = self.mz_positional_embedding(target_mzs)  # batch seq-1 d_model
 
         return intensity_embedding + mz_embedding
-
-    def forward(
-        self,
-        smiles_ids: Int[t.Tensor, "batch seq"],
-        attention_mask: Int[t.Tensor, "batch seq"],
-        collision_energy: Int[t.Tensor, "batch"],
-        instrument_type: Int[t.Tensor, "batch"],
-        tgt_intensities: Float[t.Tensor, "batch seq-1"],
-        tgt_mzs: Float[t.Tensor, "batch ms_seq-1"],
-    ) -> tuple[Float[t.Tensor, "batch seq-1"], Float[t.Tensor, "batch seq-1"]]:
-        batch, seq = smiles_ids.shape
-
+    
+    def _encoder_forward(self, smiles_ids: Int[t.Tensor, "batch seq"], attention_mask: Int[t.Tensor, "batch seq"], collision_energy: Int[t.Tensor, "batch"], instrument_type: Int[t.Tensor, "batch"]) -> Float[t.Tensor, "seq batch d_model"]:
         # Encoder embeddings
         encoder_input_embeddings = self._get_encoder_embeddings(
             smile_ids=smiles_ids,
             collision_energy=collision_energy,
             instrument_type=instrument_type,
-        ).transpose(
-            0, 1
-        )  # seq batch d_model
+        ).transpose(0, 1)  # seq batch d_model
 
+        # Forward pass
+        smiles_encoding = self.encoder(
+            inputs_embeds=encoder_input_embeddings,
+            attention_mask=attention_mask.transpose(0, 1),
+        )  # seq batch d_model
+        memory = smiles_encoding.last_hidden_state  # seq batch d_model 
+
+        return memory
+    
+    def _decoder_forward(self, tgt_intensities: Float[t.Tensor, "batch seq-1"], tgt_mzs: Float[t.Tensor, "batch ms_seq-1"], memory: Float[t.Tensor, "seq batch d_model"]) -> Float[t.Tensor, "batch seq-1"]:
         # Decoder embeddings
         decoder_embeddings = self._get_decoder_embeddings(
             target_intensities=tgt_intensities.unsqueeze(-1), target_mzs=tgt_mzs
         )  # batch seq d_model
 
         decoder_cls_token = self.decoder_cls_token.expand(
-            batch, 1, self.d_model
+            self.config.batch_size, 1, self.d_model
         )  # batch 1 d_model
         tgt = t.cat([decoder_cls_token, decoder_embeddings], dim=1).transpose(
             0, 1
@@ -132,18 +130,30 @@ class Mol2MSModel(nn.Module):
             tgt.device
         )  # seq seq
 
-        # Forward pass
-        smiles_encoding = self.encoder(
-            inputs_embeds=encoder_input_embeddings,
-            attention_mask=attention_mask.transpose(0, 1),
-        )  # seq batch d_model
-        memory = smiles_encoding.last_hidden_state  # seq batch d_model
-
         decoder_output = self.decoder(
             tgt=tgt, memory=memory, tgt_mask=tgt_mask
-        ).transpose(
-            0, 1
-        )  # batch seq d_model
+        ).transpose(0, 1)  # batch seq d_model
+
+        return decoder_output
+    
+    def forward(
+        self,
+        smiles_ids: Int[t.Tensor, "batch seq"],
+        attention_mask: Int[t.Tensor, "batch seq"],
+        collision_energy: Int[t.Tensor, "batch"],
+        instrument_type: Int[t.Tensor, "batch"],
+        tgt_intensities: Float[t.Tensor, "batch seq-1"],
+        tgt_mzs: Float[t.Tensor, "batch ms_seq-1"],
+    ) -> tuple[Float[t.Tensor, "batch seq-1"], Float[t.Tensor, "batch seq-1"]]:
+        memory = self._encoder_forward(
+            smiles_ids=smiles_ids,
+            attention_mask=attention_mask,
+            collision_energy=collision_energy,
+            instrument_type=instrument_type,
+        )
+        decoder_output = self._decoder_forward(
+            tgt_intensities=tgt_intensities, tgt_mzs=tgt_mzs, memory=memory
+        )
 
         mz_output = self.mz_output(decoder_output[:, 1:, :]).squeeze(-1)  # batch seq-1
         intensity_output = self.intensity_output(decoder_output[:, 1:, :]).squeeze(
