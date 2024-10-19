@@ -10,19 +10,27 @@ class Mol2MSLoss(nn.Module):
         super(Mol2MSLoss, self).__init__()
         self.config = config
 
-    def forward(self, pred_mz: Float[t.Tensor, "batch seq-1"], mz: Float[t.Tensor, "batch seq-1"], pred_intensity: Float[t.Tensor, "batch seq-1"]) -> Float[t.Tensor, "1"]:
-        pred_mz = pred_mz.unsqueeze(-1) # batch seq-1 1
-        mz = mz.unsqueeze(1) # batch 1 seq-1
+    def _filter_ms_data(self, tensor: Float[t.Tensor, "batch seq-1"]) -> Float[t.Tensor, "batch seq-1"]:
+        mask = tensor < 0
+        first_negative = mask.cumsum(dim=-1).argmax(dim=-1)
+        tensor = t.stack([row[:idx] for row, idx in zip(tensor, first_negative)])
+        return tensor
+
+    def _soft_jaccard_loss(self, pred_mz: Float[t.Tensor, "batch seq-1"], mz: Float[t.Tensor, "batch seq-1"], pred_intensity: Float[t.Tensor, "batch seq-1"]) -> Float[t.Tensor, "1"]:
+        pred_mz = self._filter_ms_data(pred_mz) # batch ms_seq
+        pred_mz = pred_mz.unsqueeze(-1) # batch ms_seq 1
+        mz = self._filter_ms_data(mz) # batch ms_seq
+        mz = mz.unsqueeze(1) # batch 1 ms_seq
 
         # Calculate pairwise absolute differences in m/z
-        mz_diff_matrix = t.abs(pred_mz - mz) # batch seq-1 seq-1
+        mz_diff_matrix = t.abs(pred_mz - mz) # batch ms_seq ms_seq
 
         # Soft match based on m/z proximity, weighted by true intensity
         # Find the closest match for each predicted m/z in true m/z and weight by true intensity
-        soft_match = t.exp(-mz_diff_matrix / self.config.soft_match_threshold).max(2).values # batch seq-1
+        soft_match = t.exp(-mz_diff_matrix / self.config.soft_match_threshold).max(2).values # batch ms_seq
 
         # Weight the closest matches by true intensities
-        weighted_soft_match = soft_match * pred_intensity # batch seq-1
+        weighted_soft_match = soft_match * pred_intensity # batch ms_seq
 
         # Calculate intensity-weighted intersection and union
         soft_intersect = t.sum(weighted_soft_match, dim=1) # batch
@@ -32,38 +40,58 @@ class Mol2MSLoss(nn.Module):
         soft_jaccard = (soft_intersect + self.config.epsilon) / (soft_union + self.config.epsilon) # batch
         jaccard_dist = 1 - soft_jaccard # batch
 
-        # length penalty
-        pred_length = t.sum(t.where(pred_mz >= 0.0, 1, 0), dim=1).squeeze(-1) # batch
-        true_length = t.sum(t.where(mz >= 0.0, 1, 0), dim=2).squeeze(-1) # batch
-        length_penalty = t.abs(pred_length - true_length) * self.config.length_penalty_weight
-
-        total_loss = jaccard_dist + length_penalty # batch
-
-        return total_loss.mean()
+        return jaccard_dist.mean()
     
-def calculate_loss(
-    pred_mz: Float[t.Tensor, "batch seq-1"],
-    mz: Float[t.Tensor, "batch seq-1"],
-    pred_intensity: Float[t.Tensor, "batch seq-1"],
-    intensity: Float[t.Tensor, "batch seq-1"],
-    sign_penalty_weight: float = 5.0,
-):
-    mse_loss = nn.MSELoss()
+    def _mse_loss(self, pred_mz: Float[t.Tensor, "batch seq-1"], mz: Float[t.Tensor, "batch seq-1"], pred_intensity: Float[t.Tensor, "batch seq-1"], intensity: Float[t.Tensor, "batch seq-1"]) -> tuple[Float[t.Tensor, "1"], Float[t.Tensor, "1"]]:
+        mse_loss = nn.MSELoss()
+        loss_mz = mse_loss(pred_mz, mz)
+        loss_intensity = mse_loss(pred_intensity, intensity)
 
-    loss_mz = mse_loss(pred_mz, mz)
-    loss_intensity = mse_loss(pred_intensity, intensity)
+        # Normalize MSE losses to [0, 1] range
+        max_mz = t.max(t.abs(mz))
+        max_intensity = t.max(t.abs(intensity))
+        
+        loss_mz_normalized = loss_mz / (max_mz ** 2)
+        loss_intensity_normalized = loss_intensity / (max_intensity ** 2)
 
-    sign_penalty_mz = t.mean(t.abs(t.sign(pred_mz) - t.sign(mz)))
-    sign_penalty_intensity = t.mean(t.abs(t.sign(pred_intensity) - t.sign(intensity)))
-    sign_penalty = sign_penalty_weight * (sign_penalty_mz + sign_penalty_intensity)
+        return loss_mz_normalized, loss_intensity_normalized
 
-    # Scale losses to be of the same magnitude
-    scaled_loss_mz = loss_mz / t.mean(mz**2)
-    scaled_loss_intensity = loss_intensity / t.mean(intensity**2)
+    def _sign_penalty(self, pred_mz: Float[t.Tensor, "batch seq-1"], mz: Float[t.Tensor, "batch seq-1"], pred_intensity: Float[t.Tensor, "batch seq-1"], intensity: Float[t.Tensor, "batch seq-1"]) -> Float[t.Tensor, "1"]:
+        sign_penalty_mz = t.mean(t.abs(t.sign(pred_mz) - t.sign(mz)))
+        sign_penalty_intensity = t.mean(t.abs(t.sign(pred_intensity) - t.sign(intensity)))
+        
+        # The sign penalties are already between 0 and 2, so we divide by 2 to get [0, 1]
+        sign_penalty = (sign_penalty_mz + sign_penalty_intensity) / 2
 
-    total_loss = scaled_loss_mz + scaled_loss_intensity + sign_penalty
+        return sign_penalty
 
-    return total_loss, loss_mz, loss_intensity, sign_penalty
+    def forward(
+        self, 
+        pred_mz: Float[t.Tensor, "batch seq-1"], 
+        mz: Float[t.Tensor, "batch seq-1"], 
+        intensity: Float[t.Tensor, "batch seq-1"], 
+        pred_intensity: Float[t.Tensor, "batch seq-1"]
+    ) -> tuple[Float[t.Tensor, "1"], Float[t.Tensor, "1"], Float[t.Tensor, "1"], Float[t.Tensor, "1"]]:
+        soft_jaccard_loss = self._soft_jaccard_loss(
+            pred_mz=pred_mz,
+            mz=mz,
+            pred_intensity=pred_intensity,
+        )
+
+        loss_mz, loss_intensity = self._mse_loss(
+            pred_mz=pred_mz,
+            mz=mz,
+            pred_intensity=pred_intensity,
+            intensity=intensity,
+        )
+        sign_penalty = self._sign_penalty(pred_mz, mz, pred_intensity, intensity)
+
+        soft_jaccard_loss = self.config.soft_jaccard_weight * soft_jaccard_loss 
+        loss_mz = self.config.mse_mz_weight * loss_mz 
+        loss_intensity = self.config.mse_intensity_weight * loss_intensity 
+        sign_penalty = self.config.sign_penalty_weight * sign_penalty
+
+        return soft_jaccard_loss, loss_mz, loss_intensity, sign_penalty
 
 
         
