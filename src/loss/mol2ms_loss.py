@@ -14,14 +14,14 @@ class Mol2MSLoss(nn.Module):
         self,
         pred_mz: Float[t.Tensor, "batch seq-1"],
         mz: Float[t.Tensor, "batch seq-1"],
-        true_intensity: Float[t.Tensor, "batch seq-1"],
+        intensity: Float[t.Tensor, "batch seq-1"],
     ) -> Float[t.Tensor, "1"]:
         # Create masks for valid values
         pred_mask = pred_mz >= 0
         true_mask = mz >= 0
 
         pred_mz = t.where(pred_mask, pred_mz, t.zeros_like(pred_mz))
-        true_intensity = t.where(true_mask, true_intensity, t.zeros_like(true_intensity))
+        true_intensity = t.where(true_mask, intensity, t.zeros_like(intensity))
         mz = t.where(true_mask, mz, t.zeros_like(mz))
 
         pred_mz = pred_mz.unsqueeze(2)  # batch pred_seq 1
@@ -97,7 +97,7 @@ class Mol2MSLoss(nn.Module):
         soft_jaccard_loss = self._soft_jaccard_loss(
             pred_mz=pred_mz,
             mz=mz,
-            pred_intensity=pred_intensity,
+            intensity=intensity,
         )
 
         loss_mz, loss_intensity = self._mse_loss(
