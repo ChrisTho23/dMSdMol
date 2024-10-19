@@ -9,7 +9,6 @@ import sagemaker
 from sagemaker.huggingface import HuggingFace
 
 from src.training.config import SageMakerTrainingConfig
-from src.training.utils import upload_estimator_to_hf
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -73,11 +72,6 @@ def train(
 
     logger.info("Launched training job...")
     estimator.fit()
-
-    # logger.info("Training complete. Uploading model to Hugging Face...")
-    # upload_estimator_to_hf(estimator, train_config.model_name)
-
-    # logger.info("Model uploaded to Hugging Face.")
 
 
 if __name__ == "__main__":
