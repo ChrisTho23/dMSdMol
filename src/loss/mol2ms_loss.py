@@ -10,35 +10,34 @@ class Mol2MSLoss(nn.Module):
         super(Mol2MSLoss, self).__init__()
         self.config = config
 
-    def _filter_ms_data(self, tensor: Float[t.Tensor, "batch seq-1"]) -> Float[t.Tensor, "batch seq-1"]:
-        mask = tensor < 0
-        first_negative = mask.cumsum(dim=-1).argmax(dim=-1)
-        tensor = t.stack([row[:idx] for row, idx in zip(tensor, first_negative)])
-        return tensor
-
     def _soft_jaccard_loss(self, pred_mz: Float[t.Tensor, "batch seq-1"], mz: Float[t.Tensor, "batch seq-1"], pred_intensity: Float[t.Tensor, "batch seq-1"]) -> Float[t.Tensor, "1"]:
-        pred_mz = self._filter_ms_data(pred_mz) # batch ms_seq
-        pred_mz = pred_mz.unsqueeze(-1) # batch ms_seq 1
-        mz = self._filter_ms_data(mz) # batch ms_seq
-        mz = mz.unsqueeze(1) # batch 1 ms_seq
+        # Create masks for valid values
+        pred_mask = pred_mz >= 0
+        true_mask = mz >= 0
+
+        pred_mz = pred_mz * pred_mask
+        mz = mz * true_mask
+        pred_intensity = pred_intensity * pred_mask
+
+        pred_mz = pred_mz.unsqueeze(2)  # batch pred_seq 1
+        mz = mz.unsqueeze(1)  # batch 1 true_seq
 
         # Calculate pairwise absolute differences in m/z
-        mz_diff_matrix = t.abs(pred_mz - mz) # batch ms_seq ms_seq
+        mz_diff_matrix = t.abs(pred_mz - mz)  # batch pred_seq true_seq
 
-        # Soft match based on m/z proximity, weighted by true intensity
-        # Find the closest match for each predicted m/z in true m/z and weight by true intensity
-        soft_match = t.exp(-mz_diff_matrix / self.config.soft_match_threshold).max(2).values # batch ms_seq
+        # Soft match based on m/z proximity
+        soft_match = t.exp(-mz_diff_matrix / self.config.soft_match_threshold).max(2).values  # batch pred_seq
 
-        # Weight the closest matches by true intensities
-        weighted_soft_match = soft_match * pred_intensity # batch ms_seq
+        # Weight the closest matches by predicted intensities
+        weighted_soft_match = soft_match * pred_intensity  # batch pred_seq
 
         # Calculate intensity-weighted intersection and union
-        soft_intersect = t.sum(weighted_soft_match, dim=1) # batch
-        soft_union = pred_mz.shape[1] + mz.shape[2]
+        soft_intersect = t.sum(weighted_soft_match, dim=1)  # batch
+        soft_union = pred_mask.sum(1) + true_mask.sum(1)  # batch
 
         # Calculate soft Jaccard
-        soft_jaccard = (soft_intersect + self.config.epsilon) / (soft_union + self.config.epsilon) # batch
-        jaccard_dist = 1 - soft_jaccard # batch
+        soft_jaccard = (soft_intersect + self.config.epsilon) / (soft_union + self.config.epsilon)  # batch
+        jaccard_dist = 1 - soft_jaccard  # batch
 
         return jaccard_dist.mean()
     
