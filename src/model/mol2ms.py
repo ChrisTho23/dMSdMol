@@ -193,7 +193,7 @@ class Mol2MSModel(nn.Module):
 
         return mz_tensor, intensity_tensor
 
-    def save(self, path: str):
+    def save(self, path: str, name: str):
         """Saves the model to the specified path."""
-        t.save(self.state_dict(), f"{path}/model.pt")
-        print(f"Model saved to {path}")
+        t.save(self.state_dict(), f"{path}/{name}.pt")
+        print(f"Model saved to {path}/{name}.pt")
