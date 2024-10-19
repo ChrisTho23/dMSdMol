@@ -122,13 +122,14 @@ class Mol2MSModel(nn.Module):
         tgt_mzs: Float[t.Tensor, "batch ms_seq-1"],
         memory: Float[t.Tensor, "seq batch d_model"],
     ) -> Float[t.Tensor, "batch seq-1"]:
+        batch, _ = tgt_intensities.shape
         # Decoder embeddings
         decoder_embeddings = self._get_decoder_embeddings(
             target_intensities=tgt_intensities.unsqueeze(-1), target_mzs=tgt_mzs
         )  # batch seq d_model
 
         decoder_cls_token = self.decoder_cls_token.expand(
-            self.config.batch_size, 1, self.d_model
+            batch, 1, self.d_model
         )  # batch 1 d_model
         tgt = t.cat([decoder_cls_token, decoder_embeddings], dim=1).transpose(
             0, 1
