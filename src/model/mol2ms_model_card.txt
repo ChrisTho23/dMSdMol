@@ -14,35 +14,7 @@ model-index:
       name: Abstractive Text Summarization
       type: abstractive-text-summarization
     dataset:
-      name: "SAMSum Corpus: A Human-annotated Dialogue Dataset for Abstractive Summarization" 
-      type: samsum
-    metrics:
-       - name: Validation ROGUE-1
-         type: rogue-1
-         value: 42.621
-       - name: Validation ROGUE-2
-         type: rogue-2
-         value: 21.9825
-       - name: Validation ROGUE-L
-         type: rogue-l
-         value: 33.034
-       - name: Test ROGUE-1
-         type: rogue-1
-         value: 41.3174
-       - name: Test ROGUE-2
-         type: rogue-2
-         value: 20.8716
-       - name: Test ROGUE-L
-         type: rogue-l
-         value: 32.1337
-widget:
-- text: | 
-    Jeff: Can I train a 🤗 Transformers model on Amazon SageMaker? 
-    Philipp: Sure you can use the new Hugging Face Deep Learning Container. 
-    Jeff: ok.
-    Jeff: and how can I get started? 
-    Jeff: where can I find documentation? 
-    Philipp: ok, ok you can find everything here. https://huggingface.co/blog/the-partnership-amazon-sagemaker-and-hugging-face 
+      name: {dataset_name}
 ---
 
 ## `{model_name}`
@@ -63,20 +35,11 @@ For more information look at:
 
 ## Usage
     from transformers import pipeline
-    summarizer = pipeline("summarization", model="philschmid/{model_name}")
+    summarizer = pipeline(model="christho/{model_name}")
 
-    conversation = '''Jeff: Can I train a 🤗 Transformers model on Amazon SageMaker? 
-    Philipp: Sure you can use the new Hugging Face Deep Learning Container. 
-    Jeff: ok.
-    Jeff: and how can I get started? 
-    Jeff: where can I find documentation? 
-    Philipp: ok, ok you can find everything here. https://huggingface.co/blog/the-partnership-amazon-sagemaker-and-hugging-face                                           
-    '''
     nlp(conversation)
 
 ## Results
 
 | key | value |
 | --- | ----- |
-{eval_table}
-{test_table}
