@@ -45,22 +45,17 @@ class Mol2MSLoss(nn.Module):
         mse_loss = nn.MSELoss()
         loss_mz = mse_loss(pred_mz, mz)
         loss_intensity = mse_loss(pred_intensity, intensity)
-
-        # Normalize MSE losses to [0, 1] range
-        max_mz = t.max(t.abs(mz))
-        max_intensity = t.max(t.abs(intensity))
         
-        loss_mz_normalized = loss_mz / (max_mz ** 2)
-        loss_intensity_normalized = loss_intensity / (max_intensity ** 2)
+        log_loss_mz = t.log(loss_mz)
+        log_loss_intensity = t.log(loss_intensity)
 
-        return loss_mz_normalized, loss_intensity_normalized
+        return log_loss_mz, log_loss_intensity
 
     def _sign_penalty(self, pred_mz: Float[t.Tensor, "batch seq-1"], mz: Float[t.Tensor, "batch seq-1"], pred_intensity: Float[t.Tensor, "batch seq-1"], intensity: Float[t.Tensor, "batch seq-1"]) -> Float[t.Tensor, "1"]:
         sign_penalty_mz = t.mean(t.abs(t.sign(pred_mz) - t.sign(mz)))
         sign_penalty_intensity = t.mean(t.abs(t.sign(pred_intensity) - t.sign(intensity)))
         
-        # The sign penalties are already between 0 and 2, so we divide by 2 to get [0, 1]
-        sign_penalty = (sign_penalty_mz + sign_penalty_intensity) / 2
+        sign_penalty = (sign_penalty_mz + sign_penalty_intensity) / 4
 
         return sign_penalty
 
