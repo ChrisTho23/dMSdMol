@@ -15,9 +15,9 @@ class Mol2MSLoss(nn.Module):
         pred_mask = pred_mz >= 0
         true_mask = mz >= 0
 
-        pred_mz = pred_mz * pred_mask
-        mz = mz * true_mask
-        pred_intensity = pred_intensity * pred_mask
+        pred_mz = t.where(pred_mask, pred_mz, t.zeros_like(pred_mz))
+        pred_intensity = t.where(pred_mask, pred_intensity, t.zeros_like(pred_intensity))
+        mz = t.where(true_mask, mz, t.zeros_like(mz))
 
         pred_mz = pred_mz.unsqueeze(2)  # batch pred_seq 1
         mz = mz.unsqueeze(1)  # batch 1 true_seq
