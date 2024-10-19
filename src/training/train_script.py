@@ -14,7 +14,7 @@ from transformers import get_linear_schedule_with_warmup
 
 from src.data import Mol2MSDataset
 from src.model import Mol2MSModel, Mol2MSModelConfig
-from src.training.config import Mol2MSTrainingConfig
+from .config import Mol2MSTrainingConfig
 
 dist.init_process_group(backend="smddp")
 
@@ -223,6 +223,10 @@ def train(
             wandb.log({"val_loss": avg_val_loss, "epoch": epoch + 1})
 
     logger.info("Training completed")
+
+    if dist.get_rank() == 0:
+        unwrapped_model = model.module if hasattr(model, "module") else model
+        unwrapped_model.save(training_config.output_dir, "mol2ms")
 
 
 if __name__ == "__main__":
