@@ -150,14 +150,14 @@ def train(
             scheduler.step()
 
             if dist.get_rank() == 0:
-                wandb.log({"train_loss": loss.item()})
-                progress_bar.set_postfix({
-                    "total_train_loss": f"{loss.item():.4f}",
-                    "soft_jaccard_loss": f"{soft_jaccard_loss.item():.4f}",
-                    "loss_mz": f"{loss_mz.item():.4f}",
-                    "loss_intensity": f"{loss_intensity.item():.4f}",
-                    "sign_penalty": f"{sign_penalty.item():.4f}",
+                wandb.log({
+                    "total_train_loss": loss.item(),
+                    "soft_jaccard_loss": soft_jaccard_loss.item(),
+                    "loss_mz": loss_mz.item(),
+                    "loss_intensity": loss_intensity.item(),
+                    "sign_penalty": sign_penalty.item(),
                 })
+                progress_bar.set_postfix({"total_train_loss": f"{loss.item():.4f}"})
 
         avg_loss = total_loss / len(train_loader)
         logger.info(
