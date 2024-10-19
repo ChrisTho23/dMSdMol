@@ -19,7 +19,7 @@ class Mol2MSTrainingConfig:
     learning_rate: float = field(
         default=5e-5, metadata={"help": "Learning rate for training"}
     )
-    num_epochs: int = field(default=3, metadata={"help": "Number of epochs to train"})
+    num_epochs: int = field(default=1, metadata={"help": "Number of epochs to train"})
     warmup_steps: int = field(
         default=0,
         metadata={"help": "Number of warmup steps for learning rate scheduler"},
@@ -66,7 +66,7 @@ class SageMakerTrainingConfig:
     git_config: Dict[str, str] = field(
         default_factory=lambda: {
             "repo": "https://github.com/ChrisTho23/dMSdMol",
-            "branch": "maim",
+            "branch": "add-evals",
         },
         metadata={"help": "Git configuration for source code"},
     )
