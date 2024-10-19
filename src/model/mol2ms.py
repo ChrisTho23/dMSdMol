@@ -161,6 +161,37 @@ class Mol2MSModel(nn.Module):
         )  # batch seq-1
 
         return mz_output, intensity_output
+    
+    def inference(self, smiles: str, collision_energy: int, instrument_type: int) -> tuple[Float[t.Tensor, "ms_seq"], Float[t.Tensor, "ms_seq"]]:
+        """Inference for a single SMILES string."""
+        device = next(self.parameters()).device
+
+        smiles.to(device)
+        collision_energy.to(device)
+        instrument_type.to(device)
+
+        smiles_ids = self.tokenizer(smiles, return_tensors="pt").input_ids
+
+        attention_mask = t.ones_like(smiles_ids, device=device)
+
+        memory = self._encoder_forward(
+            smiles_ids=smiles_ids.unsqueeze(0),
+            attention_mask=attention_mask,
+            collision_energy=collision_energy,
+            instrument_type=instrument_type,
+        )
+
+        mz_tensor, intensity_tensor = t.tensor([0.0], device=device), t.tensor([0.0], device=device)
+
+        while mz_tensor[-1] >= 0.0 and intensity_tensor[-1] >= 0.0:
+            decoder_output = self._decoder_forward(
+                tgt_intensities=intensity_tensor.unsqueeze(-1), tgt_mzs=mz_tensor.unsqueeze(-1), memory=memory
+            ).transpose(0, 1)
+
+            mz_tensor = t.cat([mz_tensor, self.mz_output(decoder_output[:, -1, :]).squeeze(0)], dim=0)
+            intensity_tensor = t.cat([intensity_tensor, self.intensity_output(decoder_output[:, -1, :]).squeeze(0)], dim=0)
+
+        return mz_tensor, intensity_tensor
 
     def save(self, path: str):
         """Saves the model to the specified path."""
