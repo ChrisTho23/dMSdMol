@@ -1,5 +1,7 @@
 """Loads data from S3, processes it, and loads it into a Hugging Face Dataset."""
 
+import ast
+import json
 import logging
 import os
 
@@ -50,19 +52,27 @@ def load_data(local_file_path: str = None):
         df = pd.read_parquet(local_file_path)
     return df
 
+def parse_spectra(spectra):
+    if isinstance(spectra, bytes):
+        spectra_str = spectra.decode('utf-8')
+    else:
+        spectra_str = spectra
+    
+    try:
+        # Parse the string as JSON
+        return json.loads(spectra_str)
+    except json.JSONDecodeError:
+        # If JSON parsing fails, try using ast.literal_eval
+        return ast.literal_eval(spectra_str)
 
-def df_to_dataset(df):
+
+def preprocess_enveda(df):
     columns_to_keep = [
-        "precursor_mz",
-        "precursor_charge",
         "mzs",
         "intensities",
         "collision_energy",
         "instrument_type",
-        "in_silico",
-        "smiles",
-        "adduct",
-        "compound_class",
+        "smiles"
     ]
     df = df[columns_to_keep].copy()
 
@@ -85,11 +95,8 @@ def df_to_dataset(df):
     logger.info(f"Number of samples after dropping NaN values: {df.shape[0]}")
 
     # Convert data types to match our features
-    df["precursor_mz"] = df["precursor_mz"].astype("float32")
-    df["precursor_charge"] = df["precursor_charge"].astype("int32")
     df["mzs"] = df["mzs"].apply(lambda x: [np.float32(i) for i in x])
     df["intensities"] = df["intensities"].apply(lambda x: [np.float32(i) for i in x])
-    df["compound_class"] = df["compound_class"].astype("string")
 
     # label encoding of collision energy and instrument type
     df["collision_energy"] = df["collision_energy"].astype("category").cat.codes
@@ -115,18 +122,84 @@ def df_to_dataset(df):
     else:
         logger.info("All rows have matching lengths for mzs and intensities.")
 
+    df["pressure"] = 0
+
+    return df
+
+
+def preprocess_nist(df):
+    columns_to_keep = [
+        "instrument_type",
+        "collision_energy",
+        "smiles",
+        "spectra"
+    ]
+    df = df[columns_to_keep].copy()
+
+    # print number of NaN values in specified fields
+    nan_counts = {
+        "instrument_type": df["instrument_type"].isna().sum(),
+        "collision_energy": df["collision_energy"].isna().sum(),
+        "smiles": df["smiles"].isna().sum(),
+        "spectra": df["spectra"].isna().sum(),
+    }
+
+    logger.info("Number of NaN values:")
+    for field, count in nan_counts.items():
+        logger.info(f"{field}: {count}")
+
+    # Clean dataset
+    df["collision_energy"] = df["collision_energy"].str.extract("(\d+)").astype(float)
+    df = df.dropna(subset=["collision_energy"])
+
+    # Split spectra into mzs and intensities
+    df['spectra'] = df['spectra'].apply(parse_spectra)
+
+    # Convert data types to match our features
+    df['mzs'] = df['spectra'].apply(lambda x: [np.float32(pair[0]) for pair in x])
+    df['intensities'] = df['spectra'].apply(lambda x: [np.float32(pair[1]) for pair in x])
+    df.drop(columns=["spectra"], inplace=True)
+
+    logger.info(f"Number of samples after dropping NaN values: {df.shape[0]}")
+
+    # label encoding of collision energy and instrument type
+    df["collision_energy"] = df["collision_energy"].astype("category").cat.codes
+    df["instrument_type"] = df["instrument_type"].astype("category").cat.codes
+
+    # logger.info number of distinct classes
+    logger.info(
+        f"Number of distinct collision energy classes: {df['collision_energy'].nunique()}"
+    )
+    logger.info(
+        f"Number of distinct instrument type classes: {df['instrument_type'].nunique()}"
+    )
+
+    # Check if mzs and intensities have the same length in every row
+    length_mismatch = df[df["mzs"].apply(len) != df["intensities"].apply(len)]
+    if not length_mismatch.empty:
+        logger.warning(
+            f"Found {len(length_mismatch)} rows where mzs and intensities have different lengths."
+        )
+        logger.warning("Removing these rows from the dataset.")
+        df = df[df["mzs"].apply(len) == df["intensities"].apply(len)]
+        logger.info(f"Number of samples after removing mismatched rows: {df.shape[0]}")
+    else:
+        logger.info("All rows have matching lengths for mzs and intensities.")
+
+    df["pressure"] = 0
+
+    return df
+
+
+def df_to_dataset(df):
     features = Features(
         {
-            "precursor_mz": Value("float32"),
-            "precursor_charge": Value("int32"),
             "mzs": Sequence(Value("float32")),
             "intensities": Sequence(Value("float32")),
             "collision_energy": Value("int32"),
             "instrument_type": Value("int32"),
-            "in_silico": Value("bool"),
             "smiles": Value("string"),
-            "adduct": Value("string"),
-            "compound_class": Value("string"),
+            "pressure": Value("int32"),
         }
     )
 
@@ -157,18 +230,20 @@ def df_to_dataset(df):
     return dataset_dict
 
 
-def main(local_enveda_path: str, repo_name: str):  # local_nist_path
+
+def main(local_enveda_path: str, local_nist_path: str, repo_name: str):
     logger.info("Loading enveda data...")
     enveda_df = load_data(local_enveda_path)
+    enveda_df = preprocess_enveda(enveda_df)
     logger.info(f"Enveda data loaded successfully. Data shape: {enveda_df.shape}")
 
-    # logger.info("Loading enveda data...")
-    # nist_df = load_data(local_nist_path)
-    # logger.info(f"Enveda data loaded successfully. Data shape: {df.shape}")
+    logger.info("Loading nist data...")
+    nist_df = load_data(local_nist_path)
+    nist_df = preprocess_nist(nist_df)  
+    logger.info(f"Nist data loaded successfully. Data shape: {nist_df.shape}")
 
-    # df = pd.concat([enveda_df, nist_df])
-
-    dataset = df_to_dataset(enveda_df)  # df
+    df = pd.concat([enveda_df, nist_df])
+    dataset = df_to_dataset(df)
 
     logger.info("Uploading dataset to Hugging Face Hub...")
     dataset_to_hub(dataset, repo_name, hf_username, hf_token)
