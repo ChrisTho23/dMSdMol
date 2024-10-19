@@ -15,9 +15,11 @@ class Mol2MSModel(nn.Module):
         super().__init__()
         self.config = config
 
+        self.tokenizer = tokenizer
+
         # Encoder from BartSmiles
         self.encoder = AutoModel.from_pretrained(self.config.encoder_name).encoder
-        self.encoder.resize_token_embeddings(len(tokenizer))
+        self.encoder.resize_token_embeddings(len(self.tokenizer))
 
         self.d_model = self.encoder.config.hidden_size
 
