@@ -32,6 +32,10 @@ class Mol2MSTrainingConfig:
         default=False,
         metadata={"help": "Whether to use 16-bit (mixed) precision training"},
     )
+    output_dir: str = field(
+        default="/opt/ml/output",
+        metadata={"help": "Output directory for SageMaker training job"},
+    )
 
 
 @dataclass
