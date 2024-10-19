@@ -9,7 +9,7 @@ from huggingface_hub import HfApi, Repository
 from sagemaker.huggingface import HuggingFace
 from sagemaker.s3 import S3Downloader
 
-from .config import SageMakerTrainingConfig
+from ..training.config import SageMakerTrainingConfig
 
 load_dotenv()
 
