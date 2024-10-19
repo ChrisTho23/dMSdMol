@@ -45,6 +45,9 @@ class Mol2MSModel(nn.Module):
         self.instrument_type_embedding = nn.Embedding(
             self.config.instrument_type_dim, self.d_model
         )
+        self.pressure_embedding = nn.Embedding(
+            self.config.pressure_dim, self.d_model
+        )
 
         # Decoder embeddings
         self.decoder_cls_token = nn.Parameter(t.randn(1, 1, self.d_model))
@@ -62,6 +65,7 @@ class Mol2MSModel(nn.Module):
         smile_ids: Int[t.Tensor, "batch seq"],
         collision_energy: Int[t.Tensor, "batch"],
         instrument_type: Int[t.Tensor, "batch"],
+        pressure: Int[t.Tensor, "batch"],
     ) -> Float[t.Tensor, "batch seq d_model"]:
         """Get the encoder embeddings for the SMILES."""
         smiles_embedding = self.encoder_embeddings(smile_ids)  # batch seq d_model
@@ -75,8 +79,16 @@ class Mol2MSModel(nn.Module):
         ).expand_as(
             smiles_embedding
         )  # batch seq d_model
+        pressure_embedding = self.pressure_embedding(pressure).expand_as(
+            smiles_embedding
+        )  # batch seq d_model
 
-        return smiles_embedding + collision_energy_embedding + instrument_type_embedding
+        return (
+            smiles_embedding
+            + collision_energy_embedding
+            + instrument_type_embedding
+            + pressure_embedding
+        )
 
     def _get_decoder_embeddings(
         self,
@@ -97,12 +109,14 @@ class Mol2MSModel(nn.Module):
         attention_mask: Int[t.Tensor, "batch seq"],
         collision_energy: Int[t.Tensor, "batch"],
         instrument_type: Int[t.Tensor, "batch"],
+        pressure: Int[t.Tensor, "batch"],
     ) -> Float[t.Tensor, "seq batch d_model"]:
         # Encoder embeddings
         encoder_input_embeddings = self._get_encoder_embeddings(
             smile_ids=smiles_ids,
             collision_energy=collision_energy,
             instrument_type=instrument_type,
+            pressure=pressure,
         ).transpose(
             0, 1
         )  # seq batch d_model
@@ -158,6 +172,7 @@ class Mol2MSModel(nn.Module):
         attention_mask: Int[t.Tensor, "batch seq"],
         collision_energy: Int[t.Tensor, "batch"],
         instrument_type: Int[t.Tensor, "batch"],
+        pressure: Int[t.Tensor, "batch"],
         tgt_intensities: Float[t.Tensor, "batch seq-1"],
         tgt_mzs: Float[t.Tensor, "batch ms_seq-1"],
     ) -> tuple[Float[t.Tensor, "batch seq-1"], Float[t.Tensor, "batch seq-1"]]:
@@ -166,6 +181,7 @@ class Mol2MSModel(nn.Module):
             attention_mask=attention_mask,
             collision_energy=collision_energy,
             instrument_type=instrument_type,
+            pressure=pressure,
         )
         decoder_output = self._decoder_forward(
             tgt_intensities=tgt_intensities, tgt_mzs=tgt_mzs, memory=memory
@@ -179,14 +195,15 @@ class Mol2MSModel(nn.Module):
         return mz_output, intensity_output
 
     def inference(
-        self, smiles: str, collision_energy: int, instrument_type: int
+        self, smiles: str, collision_energy: int, instrument_type: int, pressure: int
     ) -> tuple[Float[t.Tensor, "ms_seq"], Float[t.Tensor, "ms_seq"]]:
         """Inference for a single SMILES string."""
         device = next(self.parameters()).device
 
-        smiles.to(device)
-        collision_energy.to(device)
-        instrument_type.to(device)
+        smiles = t.tensor(smiles, device=device).unsqueeze(0)
+        collision_energy = t.tensor(collision_energy, device=device).unsqueeze(0)
+        instrument_type = t.tensor(instrument_type, device=device).unsqueeze(0)
+        pressure = t.tensor(pressure, device=device).unsqueeze(0)
 
         smiles_ids = self.tokenizer(smiles, return_tensors="pt").input_ids
 
@@ -197,6 +214,7 @@ class Mol2MSModel(nn.Module):
             attention_mask=attention_mask,
             collision_energy=collision_energy,
             instrument_type=instrument_type,
+            pressure=pressure,
         )
 
         mz_tensor, intensity_tensor = t.tensor([0.0], device=device), t.tensor(
