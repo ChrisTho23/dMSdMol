@@ -4,10 +4,8 @@ import fire
 import smdistributed.dataparallel.torch.torch_smddp
 import torch as t
 import torch.distributed as dist
-import torch.nn as nn
 import wandb
 from datasets import load_dataset
-from jaxtyping import Float
 from torch.utils.data import DataLoader, DistributedSampler
 from tqdm import tqdm
 from transformers import get_linear_schedule_with_warmup
@@ -138,7 +136,13 @@ def train(
                 tgt_mz,
             )
 
-            loss = loss_fn(pred_mz, mz, pred_intensity)
+            soft_jaccard_loss, loss_mz, loss_intensity, sign_penalty = loss_fn(
+                pred_mz=pred_mz,
+                mz=mz,
+                intensity=intensity,
+                pred_intensity=pred_intensity,
+            )
+            loss = soft_jaccard_loss + loss_mz + loss_intensity + sign_penalty
             total_loss += loss.item()
 
             loss.backward()
@@ -147,7 +151,13 @@ def train(
 
             if dist.get_rank() == 0:
                 wandb.log({"train_loss": loss.item()})
-                progress_bar.set_postfix({"loss": f"{loss.item():.4f}"})
+                progress_bar.set_postfix({
+                    "total_train_loss": f"{loss.item():.4f}",
+                    "soft_jaccard_loss": f"{soft_jaccard_loss.item():.4f}",
+                    "loss_mz": f"{loss_mz.item():.4f}",
+                    "loss_intensity": f"{loss_intensity.item():.4f}",
+                    "sign_penalty": f"{sign_penalty.item():.4f}",
+                })
 
         avg_loss = total_loss / len(train_loader)
         logger.info(
@@ -182,7 +192,13 @@ def train(
                     tgt_mz,
                 )
 
-                loss = loss_fn(pred_mz, mz, pred_intensity)
+                soft_jaccard_loss, loss_mz, loss_intensity, sign_penalty = loss_fn(
+                    pred_mz=pred_mz,
+                    mz=mz,
+                    intensity=intensity,
+                    pred_intensity=pred_intensity,
+                )
+                loss = soft_jaccard_loss + loss_mz + loss_intensity + sign_penalty
                 val_loss += loss.item()
 
         avg_val_loss = val_loss / len(val_loader)
