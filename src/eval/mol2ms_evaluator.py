@@ -1,19 +1,21 @@
-import torch as t
-import matplotlib.pyplot as plt
 from typing import Tuple
+
+import matplotlib.pyplot as plt
+import torch as t
+
 
 class Mol2MSEvaluator:
     def __init__(self):
         pass
 
     def evaluate(
-            self, 
-            true_mz: t.Tensor, 
-            true_intensity: t.Tensor, 
-            pred_mz: t.Tensor, 
-            pred_intensity: t.Tensor, 
-            output_file: str
-        ):
+        self,
+        true_mz: t.Tensor,
+        true_intensity: t.Tensor,
+        pred_mz: t.Tensor,
+        pred_intensity: t.Tensor,
+        output_file: str,
+    ):
         """
         Evaluate the predicted mass spectrum against the true spectrum and plot the results.
         Negative predictions and ground truths are sorted out.
@@ -44,14 +46,22 @@ class Mol2MSEvaluator:
         plt.figure(figsize=(12, 6))
 
         # Plot true spectrum
-        plt.stem(true_mz, true_intensity, linefmt='b-', markerfmt='bo', label='True Spectrum')
+        plt.stem(
+            true_mz, true_intensity, linefmt="b-", markerfmt="bo", label="True Spectrum"
+        )
 
         # Plot predicted spectrum
-        plt.stem(pred_mz, pred_intensity, linefmt='r-', markerfmt='ro', label='Predicted Spectrum')
+        plt.stem(
+            pred_mz,
+            pred_intensity,
+            linefmt="r-",
+            markerfmt="ro",
+            label="Predicted Spectrum",
+        )
 
-        plt.xlabel('m/z')
-        plt.ylabel('Intensity')
-        plt.title('True vs Predicted Mass Spectrum')
+        plt.xlabel("m/z")
+        plt.ylabel("Intensity")
+        plt.title("True vs Predicted Mass Spectrum")
         plt.legend()
 
         # Save the plot
@@ -60,10 +70,12 @@ class Mol2MSEvaluator:
 
         print(f"Evaluation plot saved to {output_file}")
 
-    def __call__(self, 
-                 true_spectrum: Tuple[t.Tensor, t.Tensor], 
-                 pred_spectrum: Tuple[t.Tensor, t.Tensor], 
-                 output_file: str):
+    def __call__(
+        self,
+        true_spectrum: Tuple[t.Tensor, t.Tensor],
+        pred_spectrum: Tuple[t.Tensor, t.Tensor],
+        output_file: str,
+    ):
         """
         Callable interface for the evaluator.
 
@@ -75,4 +87,3 @@ class Mol2MSEvaluator:
         true_mz, true_intensity = true_spectrum
         pred_mz, pred_intensity = pred_spectrum
         self.evaluate(true_mz, true_intensity, pred_mz, pred_intensity, output_file)
-

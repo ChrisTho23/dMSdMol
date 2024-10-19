@@ -90,25 +90,38 @@ class Mol2MSModel(nn.Module):
         mz_embedding = self.mz_positional_embedding(target_mzs)  # batch seq-1 d_model
 
         return intensity_embedding + mz_embedding
-    
-    def _encoder_forward(self, smiles_ids: Int[t.Tensor, "batch seq"], attention_mask: Int[t.Tensor, "batch seq"], collision_energy: Int[t.Tensor, "batch"], instrument_type: Int[t.Tensor, "batch"]) -> Float[t.Tensor, "seq batch d_model"]:
+
+    def _encoder_forward(
+        self,
+        smiles_ids: Int[t.Tensor, "batch seq"],
+        attention_mask: Int[t.Tensor, "batch seq"],
+        collision_energy: Int[t.Tensor, "batch"],
+        instrument_type: Int[t.Tensor, "batch"],
+    ) -> Float[t.Tensor, "seq batch d_model"]:
         # Encoder embeddings
         encoder_input_embeddings = self._get_encoder_embeddings(
             smile_ids=smiles_ids,
             collision_energy=collision_energy,
             instrument_type=instrument_type,
-        ).transpose(0, 1)  # seq batch d_model
+        ).transpose(
+            0, 1
+        )  # seq batch d_model
 
         # Forward pass
         smiles_encoding = self.encoder(
             inputs_embeds=encoder_input_embeddings,
             attention_mask=attention_mask.transpose(0, 1),
         )  # seq batch d_model
-        memory = smiles_encoding.last_hidden_state  # seq batch d_model 
+        memory = smiles_encoding.last_hidden_state  # seq batch d_model
 
         return memory
-    
-    def _decoder_forward(self, tgt_intensities: Float[t.Tensor, "batch seq-1"], tgt_mzs: Float[t.Tensor, "batch ms_seq-1"], memory: Float[t.Tensor, "seq batch d_model"]) -> Float[t.Tensor, "batch seq-1"]:
+
+    def _decoder_forward(
+        self,
+        tgt_intensities: Float[t.Tensor, "batch seq-1"],
+        tgt_mzs: Float[t.Tensor, "batch ms_seq-1"],
+        memory: Float[t.Tensor, "seq batch d_model"],
+    ) -> Float[t.Tensor, "batch seq-1"]:
         # Decoder embeddings
         decoder_embeddings = self._get_decoder_embeddings(
             target_intensities=tgt_intensities.unsqueeze(-1), target_mzs=tgt_mzs
@@ -132,10 +145,12 @@ class Mol2MSModel(nn.Module):
 
         decoder_output = self.decoder(
             tgt=tgt, memory=memory, tgt_mask=tgt_mask
-        ).transpose(0, 1)  # batch seq d_model
+        ).transpose(
+            0, 1
+        )  # batch seq d_model
 
         return decoder_output
-    
+
     def forward(
         self,
         smiles_ids: Int[t.Tensor, "batch seq"],
@@ -161,8 +176,10 @@ class Mol2MSModel(nn.Module):
         )  # batch seq-1
 
         return mz_output, intensity_output
-    
-    def inference(self, smiles: str, collision_energy: int, instrument_type: int) -> tuple[Float[t.Tensor, "ms_seq"], Float[t.Tensor, "ms_seq"]]:
+
+    def inference(
+        self, smiles: str, collision_energy: int, instrument_type: int
+    ) -> tuple[Float[t.Tensor, "ms_seq"], Float[t.Tensor, "ms_seq"]]:
         """Inference for a single SMILES string."""
         device = next(self.parameters()).device
 
@@ -181,15 +198,27 @@ class Mol2MSModel(nn.Module):
             instrument_type=instrument_type,
         )
 
-        mz_tensor, intensity_tensor = t.tensor([0.0], device=device), t.tensor([0.0], device=device)
+        mz_tensor, intensity_tensor = t.tensor([0.0], device=device), t.tensor(
+            [0.0], device=device
+        )
 
         while mz_tensor[-1] >= 0.0 and intensity_tensor[-1] >= 0.0:
             decoder_output = self._decoder_forward(
-                tgt_intensities=intensity_tensor.unsqueeze(-1), tgt_mzs=mz_tensor.unsqueeze(-1), memory=memory
+                tgt_intensities=intensity_tensor.unsqueeze(-1),
+                tgt_mzs=mz_tensor.unsqueeze(-1),
+                memory=memory,
             ).transpose(0, 1)
 
-            mz_tensor = t.cat([mz_tensor, self.mz_output(decoder_output[:, -1, :]).squeeze(0)], dim=0)
-            intensity_tensor = t.cat([intensity_tensor, self.intensity_output(decoder_output[:, -1, :]).squeeze(0)], dim=0)
+            mz_tensor = t.cat(
+                [mz_tensor, self.mz_output(decoder_output[:, -1, :]).squeeze(0)], dim=0
+            )
+            intensity_tensor = t.cat(
+                [
+                    intensity_tensor,
+                    self.intensity_output(decoder_output[:, -1, :]).squeeze(0),
+                ],
+                dim=0,
+            )
 
         return mz_tensor, intensity_tensor
 
