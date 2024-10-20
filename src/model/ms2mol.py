@@ -60,17 +60,29 @@ class CustomBARTModel(nn.Module):
 import torch as t
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import AutoModel
-
+from transformers import AutoModel,BartConfig
 
 
 class MS2MolModel(nn.Module):
     def __init__(self,  config):
         super(MS2MolModel, self).__init__()
         self.config = config
-
+        otherConfig=  BartConfig(
+        d_model=512,
+        encoder_layers=6,
+        decoder_layers=3,
+        encoder_attention_heads=16,
+        decoder_attention_heads=16,
+        bos_token_id=0,
+        pad_token_id=1,
+        eos_token_id=2,
+        decoder_start_token_id=0,
+        max_position_embeddings=256,
+        encoder_ffn_dim=3072,
+        decoder_ffn_dim=3072
+    )
         # Load the BART model
-        self.bart = BartModel(config)
+        self.bart = BartModel(config=otherConfig)
         
         # Embedding for individual m/z values (each m/z is its own token)
         self.encoder_embedding = nn.Linear(1, self.config.d_model)  # Project each m/z value into d_model space
@@ -192,3 +204,6 @@ class MS2MolModel(nn.Module):
                     break
         
         return generated_tokens
+    
+
+

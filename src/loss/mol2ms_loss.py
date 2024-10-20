@@ -1,57 +1,118 @@
-import torch
+import torch as t
 import torch.nn as nn
+from jaxtyping import Float
 
-class SoftJaccardLossWithTrueIntensity(nn.Module):
-    def __init__(self, threshold=0.1, length_penalty_weight=0.5, smooth=1e-6):
-        super(SoftJaccardLossWithTrueIntensity, self).__init__()
-        self.threshold = threshold  # Interval threshold for soft match
-        self.length_penalty_weight = length_penalty_weight  # Weight for the length penalty
-        self.smooth = smooth  # Smoothing term to avoid division by zero
-
-    def forward(self, y_pred, y_true,is_final=True):
-        """
-        y_pred and y_true are lists of tensors of shape [(sequence_length_pred, 2), ...]
-        where each tensor row represents [m/z, intensity].
-        """
-        batch_size = len(y_pred)
-        losses = []
-
-        for i in range(batch_size):
-            # Separate m/z and intensity for y_pred and y_true
-            mz_pred = y_pred[i][:, 0].unsqueeze(1)  # (sequence_length_pred, 1)
-            mz_true = y_true[i][:, 0].unsqueeze(0)  # (1, sequence_length_true)
-            intensity_true = y_true[i][:, 1]  # Intensities of true values (used for weighting)
-
-            # Calculate pairwise absolute differences in m/z
-            diff_matrix = torch.abs(mz_pred - mz_true)
-
-            # Soft match based on m/z proximity, weighted by true intensity
-            # Find the closest match for each predicted m/z in true m/z and weight by true intensity
-
-            soft_matches = torch.exp(-diff_matrix / self.threshold).max(dim=0).values  # Closest pred m/z for each true m/z
-
-            # Step 2: Weight the closest matches by true intensities
-            weighted_soft_matches = soft_matches * intensity_true
-
-            # Step 3: Calculate intensity-weighted intersection
-            soft_intersection = torch.sum(weighted_soft_matches)
-
-            # Step 4: Calculate union based on m/z count (no subtraction)
-            soft_union = len(y_pred[i]) + len(y_true[i])
+from .config import Mol2MSLossConfig
 
 
-            # Soft Jaccard index for the sequence pair
-            soft_jaccard = (soft_intersection + self.smooth) / (soft_union + self.smooth)
-            jaccard_loss = 1 - soft_jaccard  # Loss is 1 - Jaccard index for this sequence pair
+class Mol2MSLoss(nn.Module):
+    def __init__(self, config: Mol2MSLossConfig = Mol2MSLossConfig()):
+        super(Mol2MSLoss, self).__init__()
+        self.config = config
 
-            # Length penalty for mismatched sequence lengths
-            if is_final== True:
-                length_penalty = abs(len(y_pred[i]) - len(y_true[i])) * self.length_penalty_weight
-            else:
-                length_penalty = 0
-            # Combined loss for this sequence pair
-            total_loss = jaccard_loss + length_penalty
-            losses.append(total_loss)
+    def _soft_jaccard_loss(
+        self,
+        pred_mz: Float[t.Tensor, "batch seq-1"],
+        mz: Float[t.Tensor, "batch seq-1"],
+        pred_intensity: Float[t.Tensor, "batch seq-1"],
+    ) -> Float[t.Tensor, "1"]:
+        # Create masks for valid values
+        pred_mask = pred_mz >= 0
+        true_mask = mz >= 0
 
-        # Mean loss over the batch
-        return torch.stack(losses).mean()
+        pred_mz = t.where(pred_mask, pred_mz, t.zeros_like(pred_mz))
+        pred_intensity = t.where(
+            pred_mask, pred_intensity, t.zeros_like(pred_intensity)
+        )
+        mz = t.where(true_mask, mz, t.zeros_like(mz))
+
+        pred_mz = pred_mz.unsqueeze(2)  # batch pred_seq 1
+        mz = mz.unsqueeze(1)  # batch 1 true_seq
+
+        # Calculate pairwise absolute differences in m/z
+        mz_diff_matrix = t.abs(pred_mz - mz)  # batch pred_seq true_seq
+
+        # Soft match based on m/z proximity
+        soft_match = (
+            t.exp(-mz_diff_matrix / self.config.soft_match_threshold).max(2).values
+        )  # batch pred_seq
+
+        # Weight the closest matches by predicted intensities
+        weighted_soft_match = soft_match * pred_intensity  # batch pred_seq
+
+        # Calculate intensity-weighted intersection and union
+        soft_intersect = t.sum(weighted_soft_match, dim=1)  # batch
+        soft_union = pred_mask.sum(1) + true_mask.sum(1)  # batch
+
+        # Calculate soft Jaccard
+        soft_jaccard = (soft_intersect + self.config.epsilon) / (
+            soft_union + self.config.epsilon
+        )  # batch
+        jaccard_dist = 1 - soft_jaccard  # batch
+
+        return jaccard_dist.mean()
+
+    def _mse_loss(
+        self,
+        pred_mz: Float[t.Tensor, "batch seq-1"],
+        mz: Float[t.Tensor, "batch seq-1"],
+        pred_intensity: Float[t.Tensor, "batch seq-1"],
+        intensity: Float[t.Tensor, "batch seq-1"],
+    ) -> tuple[Float[t.Tensor, "1"], Float[t.Tensor, "1"]]:
+        mse_loss = nn.MSELoss()
+        loss_mz = mse_loss(pred_mz, mz)
+        loss_intensity = mse_loss(pred_intensity, intensity)
+
+        log_loss_mz = t.log(loss_mz)
+        log_loss_intensity = t.log(loss_intensity)
+
+        return log_loss_mz, log_loss_intensity
+
+    def _sign_penalty(
+        self,
+        pred_mz: Float[t.Tensor, "batch seq-1"],
+        mz: Float[t.Tensor, "batch seq-1"],
+        pred_intensity: Float[t.Tensor, "batch seq-1"],
+        intensity: Float[t.Tensor, "batch seq-1"],
+    ) -> Float[t.Tensor, "1"]:
+        sign_penalty_mz = t.mean(t.abs(t.sign(pred_mz) - t.sign(mz)))
+        sign_penalty_intensity = t.mean(
+            t.abs(t.sign(pred_intensity) - t.sign(intensity))
+        )
+
+        sign_penalty = (sign_penalty_mz + sign_penalty_intensity) / 4
+
+        return sign_penalty
+
+    def forward(
+        self,
+        pred_mz: Float[t.Tensor, "batch seq-1"],
+        mz: Float[t.Tensor, "batch seq-1"],
+        intensity: Float[t.Tensor, "batch seq-1"],
+        pred_intensity: Float[t.Tensor, "batch seq-1"],
+    ) -> tuple[
+        Float[t.Tensor, "1"],
+        Float[t.Tensor, "1"],
+        Float[t.Tensor, "1"],
+        Float[t.Tensor, "1"],
+    ]:
+        soft_jaccard_loss = self._soft_jaccard_loss(
+            pred_mz=pred_mz,
+            mz=mz,
+            pred_intensity=pred_intensity,
+        )
+
+        loss_mz, loss_intensity = self._mse_loss(
+            pred_mz=pred_mz,
+            mz=mz,
+            pred_intensity=pred_intensity,
+            intensity=intensity,
+        )
+        sign_penalty = self._sign_penalty(pred_mz, mz, pred_intensity, intensity)
+
+        soft_jaccard_loss = self.config.soft_jaccard_weight * soft_jaccard_loss
+        loss_mz = self.config.mse_mz_weight * loss_mz
+        loss_intensity = self.config.mse_intensity_weight * loss_intensity
+        sign_penalty = self.config.sign_penalty_weight * sign_penalty
+
+        return soft_jaccard_loss, loss_mz, loss_intensity, sign_penalty

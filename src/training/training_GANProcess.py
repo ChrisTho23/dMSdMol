@@ -1,7 +1,16 @@
+import sys
+import os
+
+# Get the root directory (parent of 'src')
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+
+# Add the root directory to the Python path
+sys.path.append(project_root)
+
 import logging
 
 import fire
-import smdistributed.dataparallel.torch.torch_smddp
+# import smdistributed.dataparallel.torch.torch_smddp
 import torch
 import torch.distributed as dist
 import torch.nn as nn
@@ -21,10 +30,18 @@ import torch
 import torch.nn as nn
 from torch.optim import AdamW
 from tqdm import tqdm
+from src.model.cycleGanStructure import MS2MolWrapperDiscriminator,MS2MolWrapperGenerator,Mol2MSWrapperDiscriminator#,Mol2MSWrapperGenerator,Mol2MSWrapperDiscriminator
+from src.model import Mol2MSModel, Mol2MSModelConfig, MS2MolModel,MS2MolModelConfig
 
 
 
+def setup_gan_train( Mol2Ms, ms2mol):
+    generator_A = Mol2Ms#MS2MolWrapperGenerator(generator_model=model2).to(device)
+    generator_B = ms2mol#Mol2MSWrapperGenerator(generator_model=model1).to(device)
 
+    discriminator_A = Mol2MSWrapperDiscriminator(base_model=ms2mol, selected_layer='decoder').to(device)
+    discriminator_B =MS2MolWrapperDiscriminator(base_model=Mol2Ms, selected_layer='decoder').to(device)
+    return {"generator_A":generator_A,"generator_B":generator_B, "discriminator_A":discriminator_A,"discriminator_B":discriminator_B}
 
 
 # CycleGAN training function with RaGAN loss
@@ -32,6 +49,7 @@ def train_cycle_gan_ragan(
     generator_A, generator_B, discriminator_A, discriminator_B,
     dataloader, num_epochs, device
 ):
+    
     # Optimizers
     optimizer_G_A = AdamW(generator_A.parameters(), lr=0.0002, betas=(0.5, 0.999))
     optimizer_G_B = AdamW(generator_B.parameters(), lr=0.0002, betas=(0.5, 0.999))
@@ -47,17 +65,38 @@ def train_cycle_gan_ragan(
         total_D_B_loss = 0
 
         for i, batch in enumerate(tqdm(dataloader)):
-            smiles, ms = batch['smiles'].to(device), batch['ms'].to(device)
-
+            
+            
+            smiles = batch['smiles_ids'].to(device)  # SMILES input
+            ms = batch['mz'].to(device)  # m/z values
+            attention_mask = batch['attention_mask'].to(device)  # Attention mask for SMILES
+            collision_energy = batch['collision_energy'].to(device)  # Collision energy
+            instrument_type = batch['instrument_type'].to(device)  # Instrument type
+            tgt_intensities = batch['tgt_intensity'].to(device)  # Target intensities for m/z
+            tgt_mzs = batch['tgt_mz'].to(device)  # Target m/z values
+    
             # 1. Train Generators A and B
             optimizer_G_A.zero_grad()
             optimizer_G_B.zero_grad()
+            fake_ms,intensity=generator_A.generate(smiles,collision_energy,instrument_type )
 
-            fake_ms = generator_A(smiles)
-            rec_smiles = generator_B(fake_ms)
+    #         fake_ms,intensity = generator_A(
+    #     smiles, 
+    #     attention_mask=attention_mask, 
+    #     collision_energy=collision_energy, 
+    #     instrument_type=instrument_type, 
+    #     tgt_intensities=tgt_intensities, 
+    #     tgt_mzs=tgt_mzs
+    # )
             
-            fake_smiles = generator_B(ms)
-            rec_ms = generator_A(fake_smiles)
+            rec_smiles = generator_B(
+        fake_ms, 
+        intensity=tgt_intensities, 
+        decoder_input_ids=smiles
+    )
+            
+            fake_smiles, = generator_B(ms,tgt_intensities,smiles)
+            rec_ms = generator_A(fake_smiles,)
 
             # Cycle consistency loss
             cycle_loss_A = cycle_consistency_loss(smiles, rec_smiles)
@@ -100,25 +139,52 @@ def train_cycle_gan_ragan(
 
         print(f"Epoch {epoch+1}/{num_epochs} - G_loss: {total_G_loss:.4f}, D_A_loss: {total_D_A_loss:.4f}, D_B_loss: {total_D_B_loss:.4f}")
 
+from src.model import ms2mol,mol2ms
+
 
 if __name__ == "__main__":
     # Initialize models (example)
-    generator_A = MS2MolWrapperGenerator(generator_model=CustomBARTModel(bart_model)).to(device)
-    generator_B = MS2MolWrapperGenerator(generator_model=Mol2MSModel(config)).to(device)
+    # generator_A = MS2MolWrapperGenerator(generator_model=CustomBARTModel(bart_model)).to(device)
+    # generator_B = MS2MolWrapperGenerator(generator_model=Mol2MSModel(config)).to(device)
 
-    discriminator_A = MS2MolWrapperDiscriminator(base_model=Mol2MSModel(config), selected_layer='encoder').to(device)
-    discriminator_B = Mol2MSDiscriminator(base_model=CustomBARTModel(bart_model), selected_layer='decoder').to(device)
-
+    # discriminator_A = MS2MolWrapperDiscriminator(base_model=Mol2MSModel(config), selected_layer='encoder').to(device)
+    # discriminator_B = Mol2MSDiscriminator(base_model=CustomBARTModel(bart_model), selected_layer='decoder').to(device)
+    hf_dataset = load_dataset("ChrisTho/dMSdMols")
+    model_config = Mol2MSModelConfig()
+    train_dataset=train_dataset = Mol2MSDataset(
+        hf_dataset["train"],
+        model_config.encoder_name,
+        model_config.max_encoder_length,
+        model_config.max_decoder_length,
+    )
     # Load your data (assuming the DataLoader returns dictionaries with 'smiles' and 'ms')
-    dataloader = ...  # Define your dataloader here
+    dataloader =  DataLoader(
+        train_dataset,
+        batch_size=2,
+    ) # Define your dataloader here
 
     # Set device (GPU if available)
     device = torch.device(
     "cuda"
     if torch.cuda.is_available()
     else "mps" if torch.backends.mps.is_available() else "cpu"
-)
-
+)   
+    mol2ms = Mol2MSModel( Mol2MSModelConfig(), train_dataset.get_tokenizer()).to(device)
+    
+    configMs2mol=MS2MolModelConfig()
     # Train the CycleGAN with RaGAN
+
+    ganDict = setup_gan_train(Mol2Ms=mol2ms, ms2mol=MS2MolModel(config=configMs2mol))
+
     num_epochs = 100  # Set your desired number of epochs
-    train_cycle_gan_ragan(generator_A, generator_B, discriminator_A, discriminator_B, dataloader, num_epochs, device)
+    
+    # Assuming ganDict contains keys like 'generator_A', 'generator_B', 'discriminator_A', 'discriminator_B'
+    train_cycle_gan_ragan(
+        generator_A=ganDict['generator_A'], 
+        generator_B=ganDict['generator_B'], 
+        discriminator_A=ganDict['discriminator_A'], 
+        discriminator_B=ganDict['discriminator_B'], 
+        dataloader=dataloader, 
+        num_epochs=num_epochs, 
+        device=device
+    )

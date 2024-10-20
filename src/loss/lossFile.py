@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 
-torch.nn.function.F
+import torch.nn.functional as F
 
 class contrastiveLoss(nn.Module):
     def __init__(self, temperature=0.07):

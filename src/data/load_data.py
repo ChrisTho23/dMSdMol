@@ -51,11 +51,6 @@ def load_data(local_file_path: str = None):
     return df
 
 
-def gen_from_dataframe(dataframe: pd.DataFrame):
-    for _, row in dataframe.iterrows():
-        yield {col: row[col] for col in dataframe.columns}
-
-
 def df_to_dataset(df):
     columns_to_keep = [
         "precursor_mz",
@@ -120,30 +115,12 @@ def df_to_dataset(df):
     else:
         logger.info("All rows have matching lengths for mzs and intensities.")
 
-    # Expand dataset
-    df["mz_intensity_pair"] = df.apply(
-        lambda row: list(zip(row["mzs"], row["intensities"])), axis=1
-    )
-    df = df.explode("mz_intensity_pair")
-    df["mzs"], df["intensities"] = [list(col) for col in zip(*df["mz_intensity_pair"])]
-
-    df = df.drop(columns=["mz_intensity_pair"])
-
-    df["index"] = df.groupby(df.index).cumcount().astype(np.int32)
-
-    df["stop_token"] = np.append(np.where(df["index"] == 0, 1, 0)[1:], 1)
-    df["stop_token"] = df["stop_token"].astype(np.int32)
-
-    logger.info(f"Number of samples after expansion: {df.shape[0]}")
-
     features = Features(
         {
             "precursor_mz": Value("float32"),
             "precursor_charge": Value("int32"),
-            "mzs": Value("float32"),
-            "intensities": Value("float32"),
-            "index": Value("int32"),
-            "stop_token": Value("int32"),
+            "mzs": Sequence(Value("float32")),
+            "intensities": Sequence(Value("float32")),
             "collision_energy": Value("int32"),
             "instrument_type": Value("int32"),
             "in_silico": Value("bool"),
@@ -169,15 +146,9 @@ def df_to_dataset(df):
     val_df = val_df.reset_index(drop=True)
 
     # To hf dataset
-    train_dataset = Dataset.from_generator(
-        lambda: gen_from_dataframe(train_df), features=features
-    )
-    test_dataset = Dataset.from_generator(
-        lambda: gen_from_dataframe(test_df), features=features
-    )
-    val_dataset = Dataset.from_generator(
-        lambda: gen_from_dataframe(val_df), features=features
-    )
+    train_dataset = Dataset.from_pandas(train_df, features=features)
+    test_dataset = Dataset.from_pandas(test_df, features=features)
+    val_dataset = Dataset.from_pandas(val_df, features=features)
 
     dataset_dict = DatasetDict(
         {"train": train_dataset, "test": test_dataset, "validation": val_dataset}
