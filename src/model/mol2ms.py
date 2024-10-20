@@ -75,7 +75,11 @@ class Mol2MSModel(nn.Module):
         ).expand_as(
             smiles_embedding
         )  # batch seq d_model
-        
+
+        print(f"smiles_embedding.min() {smiles_embedding.min()}, smiles_embedding.max() {smiles_embedding.max()}")
+        print(f"collision_energy_embedding.min() {collision_energy_embedding.min()}, collision_energy_embedding.max() {collision_energy_embedding.max()}")
+        print(f"instrument_type_embedding.min() {instrument_type_embedding.min()}, instrument_type_embedding.max() {instrument_type_embedding.max()}")
+
         return smiles_embedding + collision_energy_embedding + instrument_type_embedding
 
     def _get_decoder_embeddings(

@@ -12,7 +12,7 @@ load_dotenv()
 @dataclass
 class Mol2MSTrainingConfig:
     dataset_name: str = field(
-        default="ChrisTho/dMSdMols",  # ChrisTho/dMSdMol_dummy_data
+        default="ChrisTho/mol2ms_enveda_machine_v2",  # ChrisTho/dMSdMol_dummy_data
         metadata={"help": "Name of the dataset to use for training"},
     )
     batch_size: int = field(default=32, metadata={"help": "Batch size for training"})
