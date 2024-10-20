@@ -23,11 +23,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-device = t.device(
-    "cuda"
-    if t.cuda.is_available()
-    else "mps" if t.backends.mps.is_available() else "cpu"
-)
+device = t.device("cuda" if t.cuda.is_available() else "cpu")
 logger.info(f"Using device: {device}")
 
 
@@ -127,15 +123,24 @@ def train(
             mz = batch["mz"].to(device)
 
             optimizer.zero_grad()
-
-            pred_mz, pred_intensity = model(
-                smiles_ids,
-                attention_mask,
-                collision_energy,
-                instrument_type,
-                tgt_intensity,
-                tgt_mz,
-            )
+            try:
+                pred_mz, pred_intensity = model(
+                    smiles_ids,
+                    attention_mask,
+                    collision_energy,
+                    instrument_type,
+                    tgt_intensity,
+                    tgt_mz,
+                )
+            except Exception as e:
+                logger.error(f"Error processing batch: {e}")
+                logger.error(f"Batch shapes: smiles_ids {smiles_ids.shape}, "
+                                f"attention_mask {attention_mask.shape}, "
+                                f"collision_energy {collision_energy.shape}, "
+                                f"instrument_type {instrument_type.shape}, "
+                                f"tgt_intensity {tgt_intensity.shape}, "
+                                f"tgt_mz {tgt_mz.shape}")
+                raise  # Re-raise the exception after logging
 
             soft_jaccard_loss, loss_mz, loss_intensity, sign_penalty = loss_fn(
                 pred_mz=pred_mz,
@@ -186,25 +191,14 @@ def train(
                 intensity = batch["intensity"].to(device)
                 mz = batch["mz"].to(device)
 
-                try:
-                    pred_mz, pred_intensity = model(
-                        smiles_ids,
-                        attention_mask,
-                        collision_energy,
-                        instrument_type,
-                        tgt_intensity,
+                pred_mz, pred_intensity = model(
+                    smiles_ids,
+                    attention_mask,
+                    collision_energy,
+                    instrument_type,
+                    tgt_intensity,
                     tgt_mz,
                 )
-
-                except Exception as e:
-                    logger.error(f"Error processing batch: {e}")
-                    logger.error(f"Batch shapes: smiles_ids {smiles_ids.shape}, "
-                                 f"attention_mask {attention_mask.shape}, "
-                                 f"collision_energy {collision_energy.shape}, "
-                                 f"instrument_type {instrument_type.shape}, "
-                                 f"tgt_intensity {tgt_intensity.shape}, "
-                                 f"tgt_mz {tgt_mz.shape}")
-                    raise  # Re-raise the exception after logging
 
                 soft_jaccard_loss, loss_mz, loss_intensity, sign_penalty = loss_fn(
                     pred_mz=pred_mz,
