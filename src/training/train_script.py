@@ -1,12 +1,5 @@
 import logging
-import sys
-import os
 
-# Get the root directory (parent of 'src')
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-
-# Add the root directory to the Python path
-sys.path.append(project_root)
 import fire
 import torch as t
 import torch.distributed as dist
@@ -20,7 +13,7 @@ from transformers import get_linear_schedule_with_warmup
 from src.data import Mol2MSDataset
 from src.loss import Mol2MSLoss
 from src.model import Mol2MSModel, Mol2MSModelConfig
-from src.training.config import Mol2MSTrainingConfig
+from src.training import Mol2MSTrainingConfig
 
 # Set up logging
 logging.basicConfig(
@@ -246,9 +239,16 @@ def train(
         #     # wandb.log({"val_loss": avg_val_loss, "epoch": epoch + 1})
 
     logger.info("Training completed")
-    
-    # Clean up distributed training
-    cleanup_distributed(distributed)
+
+    if dist.get_rank() == 0:
+        model_save_path = os.path.join(training_config.output_dir, "model")
+        os.makedirs(model_save_path, exist_ok=True)
+
+        # Save the model
+        unwrapped_model = model.module if hasattr(model, "module") else model
+        unwrapped_model.save(model_save_path, "mol2ms")
+
+        logger.info(f"Model saved to {model_save_path}")
 
 
 if __name__ == "__main__":
