@@ -15,7 +15,7 @@ class Mol2MSTrainingConfig:
         default="ChrisTho/dMSdMols",  # ChrisTho/dMSdMol_dummy_data
         metadata={"help": "Name of the dataset to use for training"},
     )
-    batch_size: int = field(default=48, metadata={"help": "Batch size for training"})
+    batch_size: int = field(default=32, metadata={"help": "Batch size for training"})
     learning_rate: float = field(
         default=5e-5, metadata={"help": "Learning rate for training"}
     )
@@ -70,7 +70,7 @@ class SageMakerTrainingConfig:
     git_config: Dict[str, str] = field(
         default_factory=lambda: {
             "repo": "https://github.com/ChrisTho23/dMSdMol",
-            "branch": "main",
+            "branch": "fix-mol2ms",
         },
         metadata={"help": "Git configuration for source code"},
     )
