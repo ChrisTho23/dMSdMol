@@ -96,8 +96,8 @@ def preprocess_enveda(df):
     logger.info(f"Number of samples after dropping NaN values: {df.shape[0]}")
 
     # Convert data types to match our features
-    df["mzs"] = df["mzs"].apply(lambda x: [np.float32(i) for i in x])
-    df["intensities"] = df["intensities"].apply(lambda x: [np.float32(i) for i in x])
+    df["mzs"] = df["mzs"].apply(lambda x: [round(float(i), 4) for i in x])
+    df["intensities"] = df["intensities"].apply(lambda x: [round(float(i), 4) for i in x])
 
     # label encoding of collision energy and instrument type
     df["collision_energy"] = df["collision_energy"].astype("category").cat.codes
@@ -143,9 +143,9 @@ def preprocess_nist(df):
         logger.info(f"{field}: {count}")
 
     invalid_smiles = df[df['smiles'].isna() | (df['smiles'] == '')].index
-    print(f"Number of invalid SMILES: {len(invalid_smiles)}")
+    logger.info(f"Number of invalid SMILES: {len(invalid_smiles)}")
     if len(invalid_smiles) > 0:
-        print("Sample of invalid SMILES rows:")
+        logger.info("Sample of invalid SMILES rows:")
         print(df.loc[invalid_smiles[:5]])
 
     # Clean dataset
@@ -156,10 +156,14 @@ def preprocess_nist(df):
     df["spectra"] = df["spectra"].apply(parse_spectra)
 
     # Convert data types to match our features
-    df["mzs"] = df["spectra"].apply(lambda x: [np.float32(pair[0]) for pair in x])
-    df["intensities"] = df["spectra"].apply(
-        lambda x: [np.float32(pair[1]) for pair in x]
-    )
+    def safe_convert(pair):
+        if pd.isna(pair[0]) or pd.isna(pair[1]):
+            raise ValueError(f"NaN value found in spectra: {pair}")
+        return np.float32(np.round(pair[0], decimals=4)), np.float32(np.round(pair[1], decimals=4))
+
+    df["spectra"] = df["spectra"].apply(lambda x: [safe_convert(pair) for pair in x if safe_convert(pair) is not None])
+    df["mzs"] = df["spectra"].apply(lambda x: [pair[0] for pair in x])
+    df["intensities"] = df["spectra"].apply(lambda x: [pair[1] for pair in x])
     df.drop(columns=["spectra"], inplace=True)
 
     logger.info(f"Number of samples after dropping NaN values: {df.shape[0]}")

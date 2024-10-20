@@ -76,6 +76,8 @@ class Mol2MSModel(nn.Module):
             smiles_embedding
         )  # batch seq d_model
 
+        print(f"Smiles embdding: {smiles_embedding}")
+
         print(f"smiles_embedding.min() {smiles_embedding.min()}, smiles_embedding.max() {smiles_embedding.max()}")
         print(f"collision_energy_embedding.min() {collision_energy_embedding.min()}, collision_energy_embedding.max() {collision_energy_embedding.max()}")
         print(f"instrument_type_embedding.min() {instrument_type_embedding.min()}, instrument_type_embedding.max() {instrument_type_embedding.max()}")
