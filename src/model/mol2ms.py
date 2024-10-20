@@ -75,7 +75,6 @@ class Mol2MSModel(nn.Module):
         ).expand_as(
             smiles_embedding
         )  # batch seq d_model
-        print(f"Smiles id shape: {smile_ids.shape}")
 
         return smiles_embedding + collision_energy_embedding + instrument_type_embedding
 
