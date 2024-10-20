@@ -52,12 +52,13 @@ def load_data(local_file_path: str = None):
         df = pd.read_parquet(local_file_path)
     return df
 
+
 def parse_spectra(spectra):
     if isinstance(spectra, bytes):
-        spectra_str = spectra.decode('utf-8')
+        spectra_str = spectra.decode("utf-8")
     else:
         spectra_str = spectra
-    
+
     try:
         # Parse the string as JSON
         return json.loads(spectra_str)
@@ -72,7 +73,7 @@ def preprocess_enveda(df):
         "intensities",
         "collision_energy",
         "instrument_type",
-        "smiles"
+        "smiles",
     ]
     df = df[columns_to_keep].copy()
 
@@ -126,12 +127,7 @@ def preprocess_enveda(df):
 
 
 def preprocess_nist(df):
-    columns_to_keep = [
-        "instrument_type",
-        "collision_energy",
-        "smiles",
-        "spectra"
-    ]
+    columns_to_keep = ["instrument_type", "collision_energy", "smiles", "spectra"]
     df = df[columns_to_keep].copy()
 
     # print number of NaN values in specified fields
@@ -151,11 +147,13 @@ def preprocess_nist(df):
     df = df.dropna(subset=["collision_energy"])
 
     # Split spectra into mzs and intensities
-    df['spectra'] = df['spectra'].apply(parse_spectra)
+    df["spectra"] = df["spectra"].apply(parse_spectra)
 
     # Convert data types to match our features
-    df['mzs'] = df['spectra'].apply(lambda x: [np.float32(pair[0]) for pair in x])
-    df['intensities'] = df['spectra'].apply(lambda x: [np.float32(pair[1]) for pair in x])
+    df["mzs"] = df["spectra"].apply(lambda x: [np.float32(pair[0]) for pair in x])
+    df["intensities"] = df["spectra"].apply(
+        lambda x: [np.float32(pair[1]) for pair in x]
+    )
     df.drop(columns=["spectra"], inplace=True)
 
     logger.info(f"Number of samples after dropping NaN values: {df.shape[0]}")
@@ -194,7 +192,7 @@ def df_to_dataset(df):
             "intensities": Sequence(Value("float32")),
             "collision_energy": Value("int32"),
             "instrument_type": Value("int32"),
-            "smiles": Value("string")
+            "smiles": Value("string"),
         }
     )
 
@@ -225,7 +223,6 @@ def df_to_dataset(df):
     return dataset_dict
 
 
-
 def main(local_enveda_path: str, local_nist_path: str, repo_name: str):
     logger.info("Loading enveda data...")
     enveda_df = load_data(local_enveda_path)
@@ -234,7 +231,7 @@ def main(local_enveda_path: str, local_nist_path: str, repo_name: str):
 
     logger.info("Loading nist data...")
     nist_df = load_data(local_nist_path)
-    nist_df = preprocess_nist(nist_df)  
+    nist_df = preprocess_nist(nist_df)
     logger.info(f"Nist data loaded successfully. Data shape: {nist_df.shape}")
 
     df = pd.concat([enveda_df, nist_df])

@@ -61,7 +61,7 @@ class Mol2MSModel(nn.Module):
         self,
         smile_ids: Int[t.Tensor, "batch seq"],
         collision_energy: Int[t.Tensor, "batch"],
-        instrument_type: Int[t.Tensor, "batch"]
+        instrument_type: Int[t.Tensor, "batch"],
     ) -> Float[t.Tensor, "batch seq d_model"]:
         """Get the encoder embeddings for the SMILES."""
         smiles_embedding = self.encoder_embeddings(smile_ids)  # batch seq d_model
@@ -76,11 +76,7 @@ class Mol2MSModel(nn.Module):
             smiles_embedding
         )  # batch seq d_model
 
-        return (
-            smiles_embedding
-            + collision_energy_embedding
-            + instrument_type_embedding
-        )
+        return smiles_embedding + collision_energy_embedding + instrument_type_embedding
 
     def _get_decoder_embeddings(
         self,
@@ -100,13 +96,13 @@ class Mol2MSModel(nn.Module):
         smiles_ids: Int[t.Tensor, "batch seq"],
         attention_mask: Int[t.Tensor, "batch seq"],
         collision_energy: Int[t.Tensor, "batch"],
-        instrument_type: Int[t.Tensor, "batch"]
+        instrument_type: Int[t.Tensor, "batch"],
     ) -> Float[t.Tensor, "seq batch d_model"]:
         # Encoder embeddings
         encoder_input_embeddings = self._get_encoder_embeddings(
             smile_ids=smiles_ids,
             collision_energy=collision_energy,
-            instrument_type=instrument_type
+            instrument_type=instrument_type,
         ).transpose(
             0, 1
         )  # seq batch d_model
@@ -169,7 +165,7 @@ class Mol2MSModel(nn.Module):
             smiles_ids=smiles_ids,
             attention_mask=attention_mask,
             collision_energy=collision_energy,
-            instrument_type=instrument_type
+            instrument_type=instrument_type,
         )
         decoder_output = self._decoder_forward(
             tgt_intensities=tgt_intensities, tgt_mzs=tgt_mzs, memory=memory
@@ -200,7 +196,7 @@ class Mol2MSModel(nn.Module):
             smiles_ids=smiles_ids.unsqueeze(0),
             attention_mask=attention_mask,
             collision_energy=collision_energy,
-            instrument_type=instrument_type
+            instrument_type=instrument_type,
         )
 
         mz_tensor, intensity_tensor = t.tensor([0.0], device=device), t.tensor(

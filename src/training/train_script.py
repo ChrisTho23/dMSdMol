@@ -214,7 +214,7 @@ def train(
     if dist.get_rank() == 0:
         model_save_path = os.path.join(training_config.output_dir, "model")
         os.makedirs(model_save_path, exist_ok=True)
-        
+
         # Save the model
         unwrapped_model = model.module if hasattr(model, "module") else model
         unwrapped_model.save(model_save_path, "mol2ms")
