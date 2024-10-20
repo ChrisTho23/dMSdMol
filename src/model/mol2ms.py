@@ -15,9 +15,11 @@ class Mol2MSModel(nn.Module):
         super().__init__()
         self.config = config
 
+        self.tokenizer = tokenizer
+
         # Encoder from BartSmiles
         self.encoder = AutoModel.from_pretrained(self.config.encoder_name).encoder
-        self.encoder.resize_token_embeddings(len(tokenizer))
+        self.encoder.resize_token_embeddings(len(self.tokenizer))
 
         self.d_model = self.encoder.config.hidden_size
 
@@ -89,17 +91,13 @@ class Mol2MSModel(nn.Module):
 
         return intensity_embedding + mz_embedding
 
-    def forward(
+    def _encoder_forward(
         self,
         smiles_ids: Int[t.Tensor, "batch seq"],
         attention_mask: Int[t.Tensor, "batch seq"],
         collision_energy: Int[t.Tensor, "batch"],
         instrument_type: Int[t.Tensor, "batch"],
-        tgt_intensities: Float[t.Tensor, "batch seq-1"],
-        tgt_mzs: Float[t.Tensor, "batch ms_seq-1"],
-    ) -> tuple[Float[t.Tensor, "batch seq-1"], Float[t.Tensor, "batch seq-1"]]:
-        batch, seq = smiles_ids.shape
-
+    ) -> Float[t.Tensor, "seq batch d_model"]:
         # Encoder embeddings
         encoder_input_embeddings = self._get_encoder_embeddings(
             smile_ids=smiles_ids,
@@ -109,6 +107,22 @@ class Mol2MSModel(nn.Module):
             0, 1
         )  # seq batch d_model
 
+        # Forward pass
+        smiles_encoding = self.encoder(
+            inputs_embeds=encoder_input_embeddings,
+            attention_mask=attention_mask.transpose(0, 1),
+        )  # seq batch d_model
+        memory = smiles_encoding.last_hidden_state  # seq batch d_model
+
+        return memory
+
+    def _decoder_forward(
+        self,
+        tgt_intensities: Float[t.Tensor, "batch seq-1"],
+        tgt_mzs: Float[t.Tensor, "batch ms_seq-1"],
+        memory: Float[t.Tensor, "seq batch d_model"],
+    ) -> Float[t.Tensor, "batch seq-1"]:
+        batch, _ = tgt_intensities.shape
         # Decoder embeddings
         decoder_embeddings = self._get_decoder_embeddings(
             target_intensities=tgt_intensities.unsqueeze(-1), target_mzs=tgt_mzs
@@ -130,18 +144,32 @@ class Mol2MSModel(nn.Module):
             tgt.device
         )  # seq seq
 
-        # Forward pass
-        smiles_encoding = self.encoder(
-            inputs_embeds=encoder_input_embeddings,
-            attention_mask=attention_mask.transpose(0, 1),
-        )  # seq batch d_model
-        memory = smiles_encoding.last_hidden_state  # seq batch d_model
-
         decoder_output = self.decoder(
             tgt=tgt, memory=memory, tgt_mask=tgt_mask
         ).transpose(
             0, 1
         )  # batch seq d_model
+
+        return decoder_output
+
+    def forward(
+        self,
+        smiles_ids: Int[t.Tensor, "batch seq"],
+        attention_mask: Int[t.Tensor, "batch seq"],
+        collision_energy: Int[t.Tensor, "batch"],
+        instrument_type: Int[t.Tensor, "batch"],
+        tgt_intensities: Float[t.Tensor, "batch seq-1"],
+        tgt_mzs: Float[t.Tensor, "batch ms_seq-1"],
+    ) -> tuple[Float[t.Tensor, "batch seq-1"], Float[t.Tensor, "batch seq-1"]]:
+        memory = self._encoder_forward(
+            smiles_ids=smiles_ids,
+            attention_mask=attention_mask,
+            collision_energy=collision_energy,
+            instrument_type=instrument_type,
+        )
+        decoder_output = self._decoder_forward(
+            tgt_intensities=tgt_intensities, tgt_mzs=tgt_mzs, memory=memory
+        )
 
         mz_output = self.mz_output(decoder_output[:, 1:, :]).squeeze(-1)  # batch seq-1
         intensity_output = self.intensity_output(decoder_output[:, 1:, :]).squeeze(
@@ -150,7 +178,52 @@ class Mol2MSModel(nn.Module):
 
         return mz_output, intensity_output
 
-    def save(self, path: str):
+    def inference(
+        self, smiles: str, collision_energy: int, instrument_type: int
+    ) -> tuple[Float[t.Tensor, "ms_seq"], Float[t.Tensor, "ms_seq"]]:
+        """Inference for a single SMILES string."""
+        device = next(self.parameters()).device
+
+        smiles = t.tensor(smiles, device=device).unsqueeze(0)
+        collision_energy = t.tensor(collision_energy, device=device).unsqueeze(0)
+        instrument_type = t.tensor(instrument_type, device=device).unsqueeze(0)
+
+        smiles_ids = self.tokenizer(smiles, return_tensors="pt").input_ids
+
+        attention_mask = t.ones_like(smiles_ids, device=device)
+
+        memory = self._encoder_forward(
+            smiles_ids=smiles_ids.unsqueeze(0),
+            attention_mask=attention_mask,
+            collision_energy=collision_energy,
+            instrument_type=instrument_type,
+        )
+
+        mz_tensor, intensity_tensor = t.tensor([0.0], device=device), t.tensor(
+            [0.0], device=device
+        )
+
+        while mz_tensor[-1] >= 0.0 and intensity_tensor[-1] >= 0.0:
+            decoder_output = self._decoder_forward(
+                tgt_intensities=intensity_tensor.unsqueeze(-1),
+                tgt_mzs=mz_tensor.unsqueeze(-1),
+                memory=memory,
+            ).transpose(0, 1)
+
+            mz_tensor = t.cat(
+                [mz_tensor, self.mz_output(decoder_output[:, -1, :]).squeeze(0)], dim=0
+            )
+            intensity_tensor = t.cat(
+                [
+                    intensity_tensor,
+                    self.intensity_output(decoder_output[:, -1, :]).squeeze(0),
+                ],
+                dim=0,
+            )
+
+        return mz_tensor, intensity_tensor
+
+    def save(self, path: str, name: str):
         """Saves the model to the specified path."""
-        t.save(self.state_dict(), f"{path}/model.pt")
-        print(f"Model saved to {path}")
+        t.save(self.state_dict(), f"{path}/{name}.pt")
+        print(f"Model saved to {path}/{name}.pt")

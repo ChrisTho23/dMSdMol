@@ -1,4 +1,5 @@
 import logging
+import os
 
 import fire
 import smdistributed.dataparallel.torch.torch_smddp
@@ -13,7 +14,7 @@ from transformers import get_linear_schedule_with_warmup
 from src.data import Mol2MSDataset
 from src.loss import Mol2MSLoss
 from src.model import Mol2MSModel, Mol2MSModelConfig
-from src.training.config import Mol2MSTrainingConfig
+from src.training import Mol2MSTrainingConfig
 
 dist.init_process_group(backend="smddp")
 
@@ -209,6 +210,16 @@ def train(
             wandb.log({"val_loss": avg_val_loss, "epoch": epoch + 1})
 
     logger.info("Training completed")
+
+    if dist.get_rank() == 0:
+        model_save_path = os.path.join(training_config.output_dir, "model")
+        os.makedirs(model_save_path, exist_ok=True)
+
+        # Save the model
+        unwrapped_model = model.module if hasattr(model, "module") else model
+        unwrapped_model.save(model_save_path, "mol2ms")
+
+        logger.info(f"Model saved to {model_save_path}")
 
 
 if __name__ == "__main__":

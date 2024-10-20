@@ -9,7 +9,7 @@ from huggingface_hub import HfApi, Repository
 from sagemaker.huggingface import HuggingFace
 from sagemaker.s3 import S3Downloader
 
-from .config import SageMakerTrainingConfig
+from ..training.config import SageMakerTrainingConfig
 
 load_dotenv()
 
@@ -33,26 +33,14 @@ def upload_estimator_to_hf(
     tar.close()
     os.remove(f"{local_path}/model.tar.gz")
 
-    # create readme for model card
-    with open(f"{local_path}/eval_results.json") as f:
-        eval_results_raw = json.load(f)
-        eval_results = {}
-        # eval_results["eval_rouge1"] = eval_results_raw["eval_rouge1"] TODO: Update with actual evaluation metrics
-
-    with open(f"{local_path}/test_results.json") as f:
-        test_results_raw = json.load(f)
-        test_results = {}
-        # test_results["test_rouge1"] = test_results_raw["test_rouge1"] TODO: Update with actual evaluation metrics
-
-    # generate model card (todo: add more data from Trainer)
+    # generate model card
     with open(model_card_path, "r") as f:
         model_card_template = f.read()
 
     model_card = model_card_template.format(
         model_name=f"{training_config.model_name_or_path.split('/')[1]}-{training_config.dataset_name}",
         hyperparameters=json.dumps(training_config.__dict__, indent=4, sort_keys=True),
-        eval_table="\n".join(f"| {k} | {v} |" for k, v in eval_results.items()),
-        test_table="\n".join(f"| {k} | {v} |" for k, v in test_results.items()),
+        dataset_name=training_config.dataset_name,
     )
 
     with open(f"{local_path}/README.md", "w") as f:

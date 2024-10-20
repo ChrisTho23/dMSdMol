@@ -12,14 +12,14 @@ load_dotenv()
 @dataclass
 class Mol2MSTrainingConfig:
     dataset_name: str = field(
-        default="ChrisTho/mol2ms_enveda_machine_v2",  # ChrisTho/dMSdMol_dummy_data
+        default="ChrisTho/dMSdMols",  # ChrisTho/dMSdMol_dummy_data
         metadata={"help": "Name of the dataset to use for training"},
     )
-    batch_size: int = field(default=32, metadata={"help": "Batch size for training"})
+    batch_size: int = field(default=48, metadata={"help": "Batch size for training"})
     learning_rate: float = field(
         default=5e-5, metadata={"help": "Learning rate for training"}
     )
-    num_epochs: int = field(default=3, metadata={"help": "Number of epochs to train"})
+    num_epochs: int = field(default=1, metadata={"help": "Number of epochs to train"})
     warmup_steps: int = field(
         default=0,
         metadata={"help": "Number of warmup steps for learning rate scheduler"},
@@ -31,6 +31,10 @@ class Mol2MSTrainingConfig:
     fp16: bool = field(
         default=False,
         metadata={"help": "Whether to use 16-bit (mixed) precision training"},
+    )
+    output_dir: str = field(
+        default="/opt/ml/output",
+        metadata={"help": "Output directory for SageMaker training job"},
     )
 
 
