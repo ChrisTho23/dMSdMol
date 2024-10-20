@@ -142,6 +142,12 @@ def preprocess_nist(df):
     for field, count in nan_counts.items():
         logger.info(f"{field}: {count}")
 
+    invalid_smiles = df[df['smiles'].isna() | (df['smiles'] == '')].index
+    print(f"Number of invalid SMILES: {len(invalid_smiles)}")
+    if len(invalid_smiles) > 0:
+        print("Sample of invalid SMILES rows:")
+        print(df.loc[invalid_smiles[:5]])
+
     # Clean dataset
     df["collision_energy"] = df["collision_energy"].str.extract("(\d+)").astype(float)
     df = df.dropna(subset=["collision_energy"])
@@ -225,20 +231,20 @@ def df_to_dataset(df):
 
 def main(local_enveda_path: str, local_nist_path: str, repo_name: str):
     logger.info("Loading enveda data...")
-    enveda_df = load_data(local_enveda_path)
-    enveda_df = preprocess_enveda(enveda_df)
-    logger.info(f"Enveda data loaded successfully. Data shape: {enveda_df.shape}")
+    #enveda_df = load_data(local_enveda_path)
+    #enveda_df = preprocess_enveda(enveda_df)
+    #logger.info(f"Enveda data loaded successfully. Data shape: {enveda_df.shape}")
 
     logger.info("Loading nist data...")
     nist_df = load_data(local_nist_path)
     nist_df = preprocess_nist(nist_df)
     logger.info(f"Nist data loaded successfully. Data shape: {nist_df.shape}")
 
-    df = pd.concat([enveda_df, nist_df])
-    dataset = df_to_dataset(df)
+    #df = pd.concat([enveda_df, nist_df])
+    #dataset = df_to_dataset(df)
 
     logger.info("Uploading dataset to Hugging Face Hub...")
-    dataset_to_hub(dataset, repo_name, hf_username, hf_token)
+    #dataset_to_hub(dataset, repo_name, hf_username, hf_token)
     logger.info(f"Dataset '{repo_name}' uploaded successfully.")
 
 
