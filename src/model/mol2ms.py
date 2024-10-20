@@ -75,26 +75,6 @@ class Mol2MSModel(nn.Module):
         ).expand_as(
             smiles_embedding
         )  # batch seq d_model
-
-        # Add debug prints
-        print(f"smiles_embedding shape: {smiles_embedding.shape}")
-        print(f"collision_energy_embedding shape: {collision_energy_embedding.shape}")
-        print(f"instrument_type_embedding shape: {instrument_type_embedding.shape}")
-        
-        # Ensure all tensors are on the same device
-        collision_energy_embedding = collision_energy_embedding.to(smiles_embedding.device)
-        instrument_type_embedding = instrument_type_embedding.to(smiles_embedding.device)
-        
-        # Check for NaN values
-        print(f"smiles_embedding contains NaN: {t.isnan(smiles_embedding).any()}")
-        print(f"collision_energy_embedding contains NaN: {t.isnan(collision_energy_embedding).any()}")
-        print(f"instrument_type_embedding contains NaN: {t.isnan(instrument_type_embedding).any()}")
-        
-        # Ensure shapes are compatible for addition
-        if smiles_embedding.shape != collision_energy_embedding.shape or smiles_embedding.shape != instrument_type_embedding.shape:
-            raise ValueError(f"Incompatible shapes: smiles_embedding {smiles_embedding.shape}, "
-                             f"collision_energy_embedding {collision_energy_embedding.shape}, "
-                             f"instrument_type_embedding {instrument_type_embedding.shape}")
         
         return smiles_embedding + collision_energy_embedding + instrument_type_embedding
 
