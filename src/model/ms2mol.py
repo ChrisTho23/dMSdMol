@@ -62,65 +62,73 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import AutoModel
 
+
+
 class MS2MolModel(nn.Module):
-    def __init__(self, bart_model, config, tokenizer):
+    def __init__(self,  config):
         super(MS2MolModel, self).__init__()
         self.config = config
 
         # Load the BART model
-        self.bart = bart_model
+        self.bart = BartModel(config)
         
-        # Embeddings for the encoder (e.g., SMILES) and decoder (e.g., m/z or intensity)
-        self.encoder_embedding = nn.Embedding(self.config.vocab_size, self.config.d_model)
-        self.decoder_embedding = nn.Embedding(self.config.mz_vocab_size, self.config.d_model)
+        # Embedding for individual m/z values (each m/z is its own token)
+        self.encoder_embedding = nn.Linear(1, self.config.d_model)  # Project each m/z value into d_model space
         
-        # Embedding for intensities (as a separate input to the encoder)
-        self.intensity_embedding = nn.Linear(1, self.config.d_model)
+        # Embedding for intensities (also tokenized individually)
+        self.intensity_embedding = nn.Linear(1, self.config.d_model)  # Project each intensity into d_model space
+
+        # Embedding for the decoder (for SMILES sequence)
+        self.decoder_embedding = nn.Embedding(self.config.smiles_vocab_size, self.config.d_model)
 
         # Replace the default shared embeddings in BART
-        self.bart.encoder.embed_tokens = self.encoder_embedding
+        self.bart.encoder.embed_tokens = None  # Since we use continuous values for tokens
         self.bart.decoder.embed_tokens = self.decoder_embedding
 
         # Output layers for different tasks
-        self.fc_logits = nn.Linear(self.config.d_model, self.config.mz_vocab_size)  # SMILES output
+        self.fc_logits = nn.Linear(self.config.d_model, self.config.smiles_vocab_size)  # SMILES output
         self.collision_energy_output = nn.Linear(self.config.d_model, 1)  # Collision energy prediction
         self.machine_type_output = nn.Linear(self.config.d_model, self.config.machine_type_vocab_size)  # Machine type prediction
 
     def _get_encoder_embeddings(self, encoder_input_ids, intensity):
-        """Get the encoder embeddings and add intensity embeddings."""
-        encoder_embedded = self.encoder_embedding(encoder_input_ids)  # batch seq d_model
-        intensity_embedded = self.intensity_embedding(intensity.unsqueeze(-1))  # batch seq d_model
-        combined_embeddings = encoder_embedded + intensity_embedded  # Adding intensities
+        """Get the encoder embeddings by combining m/z values and intensities for each token."""
+        # Expand the dimension of each ms/z and intensity so they can be embedded
+        encoder_embedded = self.encoder_embedding(encoder_input_ids.unsqueeze(-1))  # Shape: (batch_size, 512, d_model)
+        intensity_embedded = self.intensity_embedding(intensity.unsqueeze(-1))  # Shape: (batch_size, 512, d_model)
+
+        # Combine the embeddings (element-wise addition of ms/z and intensity embeddings)
+        combined_embeddings = encoder_embedded + intensity_embedded  # Shape: (batch_size, 512, d_model)
+
         return combined_embeddings
 
     def forward(self, encoder_input_ids, intensity, decoder_input_ids, encoder_attention_mask=None, decoder_attention_mask=None):
         # Get encoder embeddings with intensity added
-        encoder_embedded = self._get_encoder_embeddings(encoder_input_ids, intensity)
+        encoder_embedded = self._get_encoder_embeddings(encoder_input_ids, intensity)  # Shape: (batch_size, 512, d_model)
         
         # Pass through the BART encoder
         encoder_outputs = self.bart.encoder(
-            inputs_embeds=encoder_embedded,
+            inputs_embeds=encoder_embedded,  # Shape: (batch_size, 512, d_model)
             attention_mask=encoder_attention_mask
         )
         
-        # Get decoder embeddings
-        decoder_embedded = self.decoder_embedding(decoder_input_ids)
+        # Get decoder embeddings for SMILES sequence
+        decoder_embedded = self.decoder_embedding(decoder_input_ids)  # Shape: (batch_size, seq_length, d_model)
         
         # Pass through the BART decoder
         decoder_outputs = self.bart.decoder(
             inputs_embeds=decoder_embedded,
-            encoder_hidden_states=encoder_outputs[0],
+            encoder_hidden_states=encoder_outputs[0],  # Shape: (batch_size, 512, d_model)
             attention_mask=decoder_attention_mask,
             encoder_attention_mask=encoder_attention_mask,
             use_cache=False
         )
         
         # Output for SMILES (m/z values)
-        smiles_output = self.fc_logits(decoder_outputs.last_hidden_state)
+        smiles_output = self.fc_logits(decoder_outputs.last_hidden_state)  # Shape: (batch_size, seq_length, smiles_vocab_size)
 
-        # Additional heads: Collision energy and Machine type
-        collision_energy_output = self.collision_energy_output(decoder_outputs.last_hidden_state.mean(dim=1))  # Predicting collision energy
-        machine_type_output = self.machine_type_output(decoder_outputs.last_hidden_state.mean(dim=1))  # Predicting machine type
+        # Additional heads for collision energy and machine type prediction
+        collision_energy_output = self.collision_energy_output(decoder_outputs.last_hidden_state.mean(dim=1))  # Mean pooling, Shape: (batch_size, 1)
+        machine_type_output = self.machine_type_output(decoder_outputs.last_hidden_state.mean(dim=1))  # Mean pooling, Shape: (batch_size, machine_type_vocab_size)
         
         return smiles_output, collision_energy_output, machine_type_output
     def generate(
