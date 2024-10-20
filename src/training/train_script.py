@@ -208,6 +208,7 @@ def train(
 
     if dist.get_rank() == 0:
         unwrapped_model = model.module if hasattr(model, "module") else model
+        os.makedirs(training_config.output_dir, exist_ok=True)
         unwrapped_model.save(training_config.output_dir, "mol2ms")
 
 
