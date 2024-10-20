@@ -186,14 +186,25 @@ def train(
                 intensity = batch["intensity"].to(device)
                 mz = batch["mz"].to(device)
 
-                pred_mz, pred_intensity = model(
-                    smiles_ids,
-                    attention_mask,
-                    collision_energy,
-                    instrument_type,
-                    tgt_intensity,
+                try:
+                    pred_mz, pred_intensity = model(
+                        smiles_ids,
+                        attention_mask,
+                        collision_energy,
+                        instrument_type,
+                        tgt_intensity,
                     tgt_mz,
                 )
+
+                except Exception as e:
+                    logger.error(f"Error processing batch: {e}")
+                    logger.error(f"Batch shapes: smiles_ids {smiles_ids.shape}, "
+                                 f"attention_mask {attention_mask.shape}, "
+                                 f"collision_energy {collision_energy.shape}, "
+                                 f"instrument_type {instrument_type.shape}, "
+                                 f"tgt_intensity {tgt_intensity.shape}, "
+                                 f"tgt_mz {tgt_mz.shape}")
+                    raise  # Re-raise the exception after logging
 
                 soft_jaccard_loss, loss_mz, loss_intensity, sign_penalty = loss_fn(
                     pred_mz=pred_mz,
@@ -212,14 +223,8 @@ def train(
     logger.info("Training completed")
 
     if dist.get_rank() == 0:
-        model_save_path = os.path.join(training_config.output_dir, "model")
-        os.makedirs(model_save_path, exist_ok=True)
-
-        # Save the model
         unwrapped_model = model.module if hasattr(model, "module") else model
-        unwrapped_model.save(model_save_path, "mol2ms")
-
-        logger.info(f"Model saved to {model_save_path}")
+        unwrapped_model.save(training_config.output_dir, "mol2ms")
 
 
 if __name__ == "__main__":
