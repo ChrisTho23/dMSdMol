@@ -64,9 +64,10 @@ class Mol2MSDataset(Dataset):
     def _pad_ms(
         self, mz: List[float], intensity: List[float]
     ) -> Tuple[Float[t.Tensor, "seq-1"], Float[t.Tensor, "seq-1"]]:
+        
         mz = t.tensor(mz)
         intensity = t.tensor(intensity)
-
+        
         pad_length = self.max_decoder_length - 1 - len(mz)
         if pad_length > 0:
             mz = t.nn.functional.pad(

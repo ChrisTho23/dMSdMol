@@ -2,6 +2,7 @@
 
 import torch as t
 import torch.nn as nn
+import torch
 from jaxtyping import Float, Int
 from transformers import AutoModel, AutoTokenizer
 
@@ -66,12 +67,12 @@ class Mol2MSModel(nn.Module):
         """Get the encoder embeddings for the SMILES."""
         smiles_embedding = self.encoder_embeddings(smile_ids)  # batch seq d_model
         collision_energy_embedding = self.collision_energy_embedding(
-            collision_energy
+            collision_energy.long()
         ).expand_as(
             smiles_embedding
         )  # batch seq d_model
         instrument_type_embedding = self.instrument_type_embedding(
-            instrument_type
+            instrument_type.long()
         ).expand_as(
             smiles_embedding
         )  # batch seq d_model
@@ -84,11 +85,12 @@ class Mol2MSModel(nn.Module):
         target_mzs: Float[t.Tensor, "batch seq-1"],
     ) -> Float[t.Tensor, "batch seq-1 d_model"]:
         """Get the decoder embeddings for the target intensities and mzs."""
+       
         intensity_embedding = self.intensity_embedding(
             target_intensities
         )  # batch seq-1 d_model
         mz_embedding = self.mz_positional_embedding(target_mzs)  # batch seq-1 d_model
-
+        
         return intensity_embedding + mz_embedding
 
     def _encoder_forward(
@@ -177,51 +179,121 @@ class Mol2MSModel(nn.Module):
         )  # batch seq-1
 
         return mz_output, intensity_output
+    def generate(
+        self,
+        encoder_input_ids,
+        collision_energy,
+        instrument_type,
+        max_length=50,
+        encoder_attention_mask=None,
+        eos_token_id=None,
+        store_gradients=False,
+    ):
+        """Generate m/z and intensity autoregressively using greedy decoding."""
+        
+        # Check if encoder_input_ids (SMILES) is a string, and if so, convert it to token IDs
+        if isinstance(encoder_input_ids, str):
+            encoder_input_ids = self.tokenizer.encode(encoder_input_ids, return_tensors="pt")
 
-    def inference(
-        self, smiles: str, collision_energy: int, instrument_type: int
-    ) -> tuple[Float[t.Tensor, "ms_seq"], Float[t.Tensor, "ms_seq"]]:
-        """Inference for a single SMILES string."""
+        # Ensure inputs are on the correct device
         device = next(self.parameters()).device
+        encoder_input_ids = encoder_input_ids.to(device)
+        collision_energy = collision_energy.to(device)
+        instrument_type = instrument_type.to(device)
 
-        smiles = t.tensor(smiles, device=device).unsqueeze(0)
-        collision_energy = t.tensor(collision_energy, device=device).unsqueeze(0)
-        instrument_type = t.tensor(instrument_type, device=device).unsqueeze(0)
+        # Use gradient computation if `store_gradients` is True, otherwise disable gradients
+        context_manager = torch.enable_grad() if store_gradients else torch.no_grad()
 
-        smiles_ids = self.tokenizer(smiles, return_tensors="pt").input_ids
+        with context_manager:
+            # Get encoder embeddings with collision energy and instrument type added
+            encoder_embedded = self._get_encoder_embeddings(
+                smile_ids=encoder_input_ids,
+                collision_energy=collision_energy,
+                instrument_type=instrument_type
+            ).transpose(0, 1)  # Transpose for transformer format (seq, batch, d_model)
 
-        attention_mask = t.ones_like(smiles_ids, device=device)
+            # Pass through the encoder
+            encoder_outputs = self.encoder(
+                inputs_embeds=encoder_embedded,
+                attention_mask=encoder_attention_mask
+            )  # seq, batch, d_model
+            
+            memory = encoder_outputs.last_hidden_state  # seq, batch, d_model
+            
+            # Expand the already embedded CLS token to match the batch size
+            decoder_cls_token = self.decoder_cls_token.expand(
+                encoder_input_ids.size(0), -1, -1
+            ).to(device)  # Shape: batch, 1, d_model
 
-        memory = self._encoder_forward(
-            smiles_ids=smiles_ids.unsqueeze(0),
-            attention_mask=attention_mask,
-            collision_energy=collision_energy,
-            instrument_type=instrument_type,
-        )
+            # Initialize empty lists to hold generated m/z and intensity values
+            generated_mz = []
+            generated_intensities = []
 
-        mz_tensor, intensity_tensor = t.tensor([0.0], device=device), t.tensor(
-            [0.0], device=device
-        )
+            # Autoregressive generation loop (greedy decoding)
+            for step in range(max_length):
+                if step == 0:
+                    # First step: Use the embedded CLS token directly for both m/z and intensity
+                    prev_mz = decoder_cls_token  # Shape: batch, 1, d_model
+                    prev_intensity = decoder_cls_token  # Shape: batch, 1, d_model
+                    self.config.max_decoder_length
+                    
+                    pad_mz = torch.zeros(2, self.config.max_decoder_length - 1, self.d_model, device=device)
+                    
+                    padded_mz = torch.cat([prev_mz, pad_mz], dim=1) 
+                    
+                    decoder_output = self.decoder(tgt=prev_mz.transpose(0,1), memory=memory).transpose(0, 1)  # Shape: batch, seq, d_model
+                    # Compute m/z and intensity outputs for this step
+                    next_mz = self.mz_output(decoder_output[:, -1, :]).unsqueeze(1)  # Shape: batch, 1
+                    next_intensity = self.intensity_output(decoder_output[:, -1, :]).unsqueeze(1)  # Shape: batch, 1
+                    generated_mz.append(next_mz)
+                    generated_intensities.append(next_intensity)
+                else:
+                    # After the first step, use the previously generated outputs (which are embedded)
+                    prev_mz = generated_mz[-1]  # Shape: batch, 1, d_model
+                    prev_intensity = generated_intensities[-1]  # Shape: batch, 1, d_model
 
-        while mz_tensor[-1] >= 0.0 and intensity_tensor[-1] >= 0.0:
-            decoder_output = self._decoder_forward(
-                tgt_intensities=intensity_tensor.unsqueeze(-1),
-                tgt_mzs=mz_tensor.unsqueeze(-1),
-                memory=memory,
-            ).transpose(0, 1)
+                    # Embed the previously generated m/z and intensity using _get_decoder_embeddings
+                    print(prev_mz.shape)
+                    print(prev_intensity.shape)
+                    decoder_embedded = self._get_decoder_embeddings(
+                        target_intensities=prev_intensity,  # Already in the embedded space
+                        target_mzs=prev_mz.squeeze(-1)  # Already in the embedded space
+                    )  # Shape: batch, 1, d_model
 
-            mz_tensor = t.cat(
-                [mz_tensor, self.mz_output(decoder_output[:, -1, :]).squeeze(0)], dim=0
-            )
-            intensity_tensor = t.cat(
-                [
-                    intensity_tensor,
-                    self.intensity_output(decoder_output[:, -1, :]).squeeze(0),
-                ],
-                dim=0,
-            )
+                    # Concatenate decoder_cls_token only after the first step
+                    # Shape: batch, seq, d_model
+                    
+                    # Transpose to match the transformer input format (seq, batch, d_model)
+                    tgt = decoder_embedded.transpose(0, 1)  # Shape: seq, batch, d_model
 
-        return mz_tensor, intensity_tensor
+                    # Mask for autoregressive generation
+                    tgt_mask = torch.triu(
+                        torch.full((tgt.size(0), tgt.size(0)), float("-inf")),
+                        diagonal=1
+                    ).to(device)
+
+                    # Forward pass through the decoder
+                    decoder_output = self.decoder(tgt=tgt, memory=memory, tgt_mask=tgt_mask).transpose(0, 1)  # Shape: batch, seq, d_model
+
+                    # Compute m/z and intensity outputs for this step
+                    next_mz = self.mz_output(decoder_output[:, -1, :]).unsqueeze(1)  # Shape: batch, 1
+                    next_intensity = self.intensity_output(decoder_output[:, -1, :]).unsqueeze(1)  # Shape: batch, 1
+
+                    # Append the predicted m/z and intensity for this step
+                    generated_mz.append(next_mz)
+                    generated_intensities.append(next_intensity)
+
+                    # Optionally break if eos_token_id is generated (for SMILES generation, not m/z and intensity)
+                    if eos_token_id is not None and torch.any(next_mz == eos_token_id):
+                        break
+
+            # Concatenate the generated m/z and intensity values along the sequence dimension
+            generated_mz = torch.cat(generated_mz, dim=1)  # Shape: batch, seq, d_model
+            generated_intensities = torch.cat(generated_intensities, dim=1)  # Shape: batch, seq, d_model
+
+        return generated_mz, generated_intensities
+
+
 
     def save(self, path: str, name: str):
         """Saves the model to the specified path."""

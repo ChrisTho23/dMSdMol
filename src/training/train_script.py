@@ -1,12 +1,11 @@
 import logging
-import os
 
 import fire
-import smdistributed.dataparallel.torch.torch_smddp
 import torch as t
 import torch.distributed as dist
 import wandb
 from datasets import load_dataset
+
 from torch.utils.data import DataLoader, DistributedSampler
 from tqdm import tqdm
 from transformers import get_linear_schedule_with_warmup
@@ -16,8 +15,7 @@ from src.loss import Mol2MSLoss
 from src.model import Mol2MSModel, Mol2MSModelConfig
 from src.training import Mol2MSTrainingConfig
 
-dist.init_process_group(backend="smddp")
-
+# Set up logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
@@ -30,16 +28,33 @@ device = t.device(
 )
 logger.info(f"Using device: {device}")
 
+def initialize_distributed(distributed):
+    if distributed:
+        # Set up distributed training environment variables
+        # Initialize the process group
+        dist.init_process_group(backend="smdpp")
+        logger.info("Distributed training enabled.")
+    else:
+        logger.info("Distributed training disabled.")
+
+def cleanup_distributed(distributed):
+    if distributed:
+        dist.destroy_process_group()
 
 def train(
     model_config: Mol2MSModelConfig = Mol2MSModelConfig(),
     training_config: Mol2MSTrainingConfig = Mol2MSTrainingConfig(),
     wandb_project: str = None,
     wandb_api_key: str = None,
+    distributed: bool = False,  # Flag for distributed training
+    wandb_watch: bool = False   # New flag to control wandb.watch
 ):
     logger.info("Starting training process")
 
-    if wandb_project and wandb_api_key and dist.get_rank() == 0:
+    # Initialize distributed if necessary
+    initialize_distributed(distributed)
+
+    if wandb_project and wandb_api_key and (not distributed or dist.get_rank() == 0):
         wandb.login(key=wandb_api_key)
         wandb.init(
             project=wandb_project,
@@ -53,14 +68,20 @@ def train(
         )
 
     logger.info(f"Loading dataset: {training_config.dataset_name}")
-    hf_dataset = load_dataset(training_config.dataset_name)
+    
+    hf_dataset = load_dataset("ChrisTho/dMSdMols")
 
-    train_sampler = DistributedSampler(
-        hf_dataset["train"], num_replicas=dist.get_world_size(), rank=dist.get_rank()
-    )
-    val_sampler = DistributedSampler(
-        hf_dataset["test"], num_replicas=dist.get_world_size(), rank=dist.get_rank()
-    )
+
+    if distributed:
+        train_sampler = DistributedSampler(
+            hf_dataset["train"], num_replicas=dist.get_world_size(), rank=dist.get_rank()
+        )
+        val_sampler = DistributedSampler(
+            hf_dataset["test"], num_replicas=dist.get_world_size(), rank=dist.get_rank()
+        )
+    else:
+        train_sampler = None
+        val_sampler = None
 
     train_dataset = Mol2MSDataset(
         hf_dataset["train"],
@@ -79,7 +100,7 @@ def train(
     train_loader = DataLoader(
         train_dataset,
         batch_size=training_config.batch_size,
-        shuffle=False,
+        shuffle=(train_sampler is None),  # Shuffle only if not using a sampler
         sampler=train_sampler,
     )
     val_loader = DataLoader(
@@ -90,9 +111,14 @@ def train(
     )
 
     logger.info("Initializing model")
+    print(device)
     model = Mol2MSModel(model_config, train_dataset.get_tokenizer()).to(device)
-    model = t.nn.parallel.DistributedDataParallel(model, device_ids=[dist.get_rank()])
-    if dist.get_rank() == 0:
+    
+    if distributed:
+        model = t.nn.parallel.DistributedDataParallel(model, device_ids=[dist.get_rank()])
+    
+    # Use wandb.watch only if wandb_watch is True
+    if wandb_watch and (not distributed or dist.get_rank() == 0):
         wandb.watch(model)
 
     optimizer = t.optim.AdamW(model.parameters(), lr=training_config.learning_rate)
@@ -110,12 +136,15 @@ def train(
         model.train()
         total_loss = 0
 
-        train_loader.sampler.set_epoch(epoch)
+        if distributed:
+            train_loader.sampler.set_epoch(epoch)
+        
         progress_bar = (
             tqdm(train_loader, desc=f"Epoch {epoch+1}/{training_config.num_epochs}")
-            if dist.get_rank() == 0
+            if not distributed or dist.get_rank() == 0
             else train_loader
         )
+
         for _, batch in enumerate(progress_bar):
             smiles_ids = batch["smiles_ids"].to(device)
             attention_mask = batch["attention_mask"].to(device)
@@ -150,16 +179,16 @@ def train(
             optimizer.step()
             scheduler.step()
 
-            if dist.get_rank() == 0:
-                wandb.log(
-                    {
-                        "total_train_loss": loss.item(),
-                        "soft_jaccard_loss": soft_jaccard_loss.item(),
-                        "loss_mz": loss_mz.item(),
-                        "loss_intensity": loss_intensity.item(),
-                        "sign_penalty": sign_penalty.item(),
-                    }
-                )
+            if not distributed or dist.get_rank() == 0:
+                # wandb.log(
+                #     {
+                #         "total_train_loss": loss.item(),
+                #         "soft_jaccard_loss": soft_jaccard_loss.item(),
+                #         "loss_mz": loss_mz.item(),
+                #         "loss_intensity": loss_intensity.item(),
+                #         "sign_penalty": sign_penalty.item(),
+                #     }
+                # )
                 progress_bar.set_postfix({"total_train_loss": f"{loss.item():.4f}"})
 
         avg_loss = total_loss / len(train_loader)
@@ -174,7 +203,7 @@ def train(
         with t.no_grad():
             for batch in (
                 tqdm(val_loader, desc="Validation")
-                if dist.get_rank() == 0
+                if not distributed or dist.get_rank() == 0
                 else val_loader
             ):
                 smiles_ids = batch["smiles_ids"].to(device)
@@ -206,8 +235,8 @@ def train(
 
         avg_val_loss = val_loss / len(val_loader)
         logger.info(f"Validation Loss: {avg_val_loss:.4f}")
-        if dist.get_rank() == 0:
-            wandb.log({"val_loss": avg_val_loss, "epoch": epoch + 1})
+        # if not distributed or dist.get_rank() == 0:
+        #     # wandb.log({"val_loss": avg_val_loss, "epoch": epoch + 1})
 
     logger.info("Training completed")
 
