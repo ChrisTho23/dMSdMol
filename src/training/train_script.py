@@ -121,7 +121,6 @@ def train(
             attention_mask = batch["attention_mask"].to(device)
             collision_energy = batch["collision_energy"].to(device)
             instrument_type = batch["instrument_type"].to(device)
-            pressure = batch["pressure"].to(device)
             tgt_intensity = batch["tgt_intensity"].to(device)
             tgt_mz = batch["tgt_mz"].to(device)
             intensity = batch["intensity"].to(device)
@@ -134,7 +133,6 @@ def train(
                 attention_mask,
                 collision_energy,
                 instrument_type,
-                pressure,
                 tgt_intensity,
                 tgt_mz,
             )
@@ -183,7 +181,6 @@ def train(
                 attention_mask = batch["attention_mask"].to(device)
                 collision_energy = batch["collision_energy"].to(device)
                 instrument_type = batch["instrument_type"].to(device)
-                pressure = batch["pressure"].to(device)
                 tgt_intensity = batch["tgt_intensity"].to(device)
                 tgt_mz = batch["tgt_mz"].to(device)
                 intensity = batch["intensity"].to(device)
@@ -194,7 +191,6 @@ def train(
                     attention_mask,
                     collision_energy,
                     instrument_type,
-                    pressure,
                     tgt_intensity,
                     tgt_mz,
                 )

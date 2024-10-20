@@ -109,7 +109,6 @@ class Mol2MSDataset(Dataset):
             "attention_mask": smiles.attention_mask.squeeze(),  # 1 seq
             "collision_energy": t.tensor([item["collision_energy"]]),  # 1
             "instrument_type": t.tensor([item["instrument_type"]]),  # 1
-            "pressure": t.tensor([item["pressure"]]),  # 1
             "tgt_intensity": tgt_intensity,  # seq-1
             "tgt_mz": tgt_mz,  # seq-1
             "intensity": intensity,  # seq-1

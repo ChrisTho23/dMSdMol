@@ -122,8 +122,6 @@ def preprocess_enveda(df):
     else:
         logger.info("All rows have matching lengths for mzs and intensities.")
 
-    df["pressure"] = 0
-
     return df
 
 
@@ -186,8 +184,6 @@ def preprocess_nist(df):
     else:
         logger.info("All rows have matching lengths for mzs and intensities.")
 
-    df["pressure"] = 0
-
     return df
 
 
@@ -198,8 +194,7 @@ def df_to_dataset(df):
             "intensities": Sequence(Value("float32")),
             "collision_energy": Value("int32"),
             "instrument_type": Value("int32"),
-            "smiles": Value("string"),
-            "pressure": Value("int32"),
+            "smiles": Value("string")
         }
     )
 
