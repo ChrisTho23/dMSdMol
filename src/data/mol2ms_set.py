@@ -97,7 +97,9 @@ class Mol2MSDataset(Dataset):
     def __getitem__(self, idx) -> Dict[str, t.Tensor]:
         item = self.dataset[idx]
 
+        print(f"Untokenized smiles: {item['smiles']}")
         smiles = self._tokenize(item["smiles"])
+        print(f"Tokenized smiles: {smiles}")
 
         mz, intensity = self._pad_ms(item["mzs"], item["intensities"])
 
