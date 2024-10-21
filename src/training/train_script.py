@@ -3,8 +3,8 @@ import logging
 import fire
 import torch as t
 import torch.distributed as dist
-from datasets import load_dataset
 import wandb
+from datasets import load_dataset
 from torch.utils.data import DataLoader, DistributedSampler
 from tqdm import tqdm
 from transformers import get_linear_schedule_with_warmup

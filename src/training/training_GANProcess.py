@@ -15,6 +15,7 @@ import fire
 import torch
 import torch.distributed as dist
 import torch.nn as nn
+import wandb
 from datasets import load_dataset
 from torch.nn.utils.rnn import pad_sequence
 from torch.optim import AdamW
@@ -22,7 +23,6 @@ from torch.utils.data import DataLoader, DistributedSampler
 from tqdm import tqdm
 from transformers import get_linear_schedule_with_warmup
 
-import wandb
 from src.data import Mol2MSDataset
 from src.loss.lossFile import ragan_loss
 from src.model import Mol2MSModel, Mol2MSModelConfig, MS2MolModel, MS2MolModelConfig
