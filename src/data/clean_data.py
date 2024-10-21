@@ -1,9 +1,8 @@
-
 import pandas as pd
-
 from datasets import load_dataset
-fileLoc="/Users/aaronfanous/Downloads/enveda_library_subset.parquet"
-# in this you need to clean the data frame from enved. 
+
+fileLoc = "/Users/aaronfanous/Downloads/enveda_library_subset.parquet"
+# in this you need to clean the data frame from enved.
 # dataset = load_dataset("parquet",data_files=fileLoc)
 # print(dataset["train"].features)
 # df=pd.read_parquet()
@@ -11,7 +10,6 @@ fileLoc="/Users/aaronfanous/Downloads/enveda_library_subset.parquet"
 # print(df.columns)
 # def cleanlists(x):
 #     x.strip('\n')
-    
 
 
 # # 1. Check data types for each column
@@ -27,36 +25,35 @@ fileLoc="/Users/aaronfanous/Downloads/enveda_library_subset.parquet"
 # # Define the path to the original and subset Parquet files
 
 import pandas as pd
-from datasets import Dataset, DatasetDict, Features, Value, Sequence
+import pyarrow.parquet as pq
+from datasets import Dataset, DatasetDict, Features, Sequence, Value
 from sklearn.model_selection import train_test_split
 
-import pyarrow.parquet as pq
-from datasets import Dataset, DatasetDict, Features, Value, Sequence
-from sklearn.model_selection import train_test_split
-import pandas as pd
 
 def df_to_dataset_from_parquet(parquet_file):
     # Load the Parquet file directly with PyArrow
     table = pq.read_table(parquet_file)
-    
+
     # Convert the PyArrow Table to a Pandas DataFrame without losing schema
     df = table.to_pandas(ignore_metadata=True)
 
     # Define the schema directly based on inferred features from load_dataset
-    features = Features({
-        "precursor_mz": Value("float64"),
-        "precursor_charge": Value("float64"),
-        "mzs": Sequence(Value("float64")),
-        "intensities": Sequence(Value("float64")),
-        "in_silico": Value("bool"),
-        "smiles": Value("string"),
-        "adduct": Value("string"),
-        "collision_energy": Value("string"),
-        "instrument_type": Value("string"),
-        "compound_class": Value("string"),
-        "entropy": Value("float64"),
-        "scaffold_smiles": Value("string"),
-    })
+    features = Features(
+        {
+            "precursor_mz": Value("float64"),
+            "precursor_charge": Value("float64"),
+            "mzs": Sequence(Value("float64")),
+            "intensities": Sequence(Value("float64")),
+            "in_silico": Value("bool"),
+            "smiles": Value("string"),
+            "adduct": Value("string"),
+            "collision_energy": Value("string"),
+            "instrument_type": Value("string"),
+            "compound_class": Value("string"),
+            "entropy": Value("float64"),
+            "scaffold_smiles": Value("string"),
+        }
+    )
 
     # Split data into train, test, and validation sets
     train_df, test_df = train_test_split(df, test_size=0.2, random_state=42)
@@ -73,4 +70,6 @@ def df_to_dataset_from_parquet(parquet_file):
     )
 
     return dataset_dict
+
+
 df_to_dataset_from_parquet(fileLoc)

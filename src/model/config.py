@@ -14,8 +14,9 @@ class Mol2MSModelConfig:
     max_decoder_length: int = 512
     num_heads: int = 16
     num_layers: int = 12
-    hidden_size:int=512
-    
+    hidden_size: int = 512
+
+
 @dataclass
 class MS2MolModelConfig:
     encoder_name: str = "gayane/BARTSmiles"  # Pretrained encoder model
@@ -29,7 +30,8 @@ class MS2MolModelConfig:
     smiles_vocab_size: int = 1026  # Vocabulary size for SMILES
     mz_vocab_size: int = 512  # Output size for m/z prediction
     machine_type_vocab_size: int = 51  # Number of machine types
-    hidden_size:int= 512
+    hidden_size: int = 512
+
 
 # #TODO: rename this
 # @dataclass
@@ -37,4 +39,3 @@ class MS2MolModelConfig:
 #     mol_ms_config: Mol2MSModelConfig=Mol2MSModelConfig()
 #     ms_mol_config: MS2MolModelConfig =MS2MolModelConfig()
 #     other:dict = (arbitraryDict:={})
-    
