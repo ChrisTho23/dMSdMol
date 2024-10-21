@@ -3,9 +3,8 @@ import logging
 import fire
 import torch as t
 import torch.distributed as dist
-import wandb
 from datasets import load_dataset
-
+import wandb
 from torch.utils.data import DataLoader, DistributedSampler
 from tqdm import tqdm
 from transformers import get_linear_schedule_with_warmup
@@ -28,6 +27,7 @@ device = t.device(
 )
 logger.info(f"Using device: {device}")
 
+
 def initialize_distributed(distributed):
     if distributed:
         # Set up distributed training environment variables
@@ -37,9 +37,11 @@ def initialize_distributed(distributed):
     else:
         logger.info("Distributed training disabled.")
 
+
 def cleanup_distributed(distributed):
     if distributed:
         dist.destroy_process_group()
+
 
 def train(
     model_config: Mol2MSModelConfig = Mol2MSModelConfig(),
@@ -47,7 +49,7 @@ def train(
     wandb_project: str = None,
     wandb_api_key: str = None,
     distributed: bool = False,  # Flag for distributed training
-    wandb_watch: bool = False   # New flag to control wandb.watch
+    wandb_watch: bool = False,  # New flag to control wandb.watch
 ):
     logger.info("Starting training process")
 
@@ -68,13 +70,14 @@ def train(
         )
 
     logger.info(f"Loading dataset: {training_config.dataset_name}")
-    
-    hf_dataset = load_dataset("ChrisTho/dMSdMols")
 
+    hf_dataset = load_dataset("ChrisTho/dMSdMols")
 
     if distributed:
         train_sampler = DistributedSampler(
-            hf_dataset["train"], num_replicas=dist.get_world_size(), rank=dist.get_rank()
+            hf_dataset["train"],
+            num_replicas=dist.get_world_size(),
+            rank=dist.get_rank(),
         )
         val_sampler = DistributedSampler(
             hf_dataset["test"], num_replicas=dist.get_world_size(), rank=dist.get_rank()
@@ -113,10 +116,12 @@ def train(
     logger.info("Initializing model")
     print(device)
     model = Mol2MSModel(model_config, train_dataset.get_tokenizer()).to(device)
-    
+
     if distributed:
-        model = t.nn.parallel.DistributedDataParallel(model, device_ids=[dist.get_rank()])
-    
+        model = t.nn.parallel.DistributedDataParallel(
+            model, device_ids=[dist.get_rank()]
+        )
+
     # Use wandb.watch only if wandb_watch is True
     if wandb_watch and (not distributed or dist.get_rank() == 0):
         wandb.watch(model)
@@ -138,7 +143,7 @@ def train(
 
         if distributed:
             train_loader.sampler.set_epoch(epoch)
-        
+
         progress_bar = (
             tqdm(train_loader, desc=f"Epoch {epoch+1}/{training_config.num_epochs}")
             if not distributed or dist.get_rank() == 0
