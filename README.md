@@ -1,6 +1,6 @@
 # Team 4: de-MS-tifying dark Mols - Evolved 2024 Hackathon Submission
 
-This repository contains the submission of Team 4 (de-MS-tifying dark Mols) for the Evolved 2024 hackathon, which was selected to participate as one of 20 teams in the event. The Evolved 2024 hackathon (organized by Evolutionary Scale and Lux Capital) presented the Enveda challenge. For more information on the hackathon, visit [here](https://hackathon.bio/), and on the Enveda challenge [here](https://hackathon.bio/challenge/enveda-2024).
+This repository represents the submission of Team 4 (de-MS-tifying dark Mols) for the Evolved 2024 hackathon (organized by Evolutionary Scale and Lux Capital). Upon review of the over 200 proposals submitted, this project got selected as one of the 20 finalists participating in the 10-day hackathon period from October 10 to Octover 20 in 2024. dMSdMol was eventually ranked Top 3 in the Enveda challenge. For more information on the hackathon, visit [here](https://hackathon.bio/), and on the Enveda challenge, [here](https://hackathon.bio/challenge/enveda-2024). The hackathon also got mentioned in Nature Biotech, see [here](https://www.nature.com/articles/d41586-024-03335-z).
 
 ## The Challenge
 
